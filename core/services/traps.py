@@ -150,13 +150,6 @@ class TrapsEditor(Service):
 
         self.request_reactions['TRAPS_SPECS'] = lambda: self.prepare_specs()
 
-        self.sheet.popup_menu_add_command(
-            "Say Hello",
-            self.plot_traps,
-            index_menu=False,
-            header_menu=False,
-            empty_space_menu=False,
-        )
 
     def plot_traps(self):
         x = []
