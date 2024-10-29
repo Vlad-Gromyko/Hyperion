@@ -4,6 +4,7 @@ import screeninfo
 import numpy as np
 
 import matplotlib.pyplot as plt
+import time
 
 mm = 10 ** -3
 um = 10 ** -6
@@ -72,6 +73,7 @@ def to_slm(image):
     cv2.waitKey(1)
 
 
+
 def plot2d(array):
     fig, ax = plt.subplots()
     im = ax.imshow(array, cmap='hot')
@@ -82,26 +84,36 @@ def plot2d(array):
 
 
 if __name__ == '__main__':
+
+
+    shift = calc_holo(0, 2002 * um)
+    to_slm(shift)
+
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    _, back = cap.read()
+    back = cv2.cvtColor(back, cv2.COLOR_BGR2GRAY)
+    back = np.asarray(back, dtype='int16')
+
+    plot2d(back)
+    cap.release()
+
+    holo = calc_holo(500 * um, 0)
+    to_slm(holo)
+
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-    shift = calc_holo(0, 2000 * um)
-    to_slm(shift)
-    _, back = cap.read()
-    back = cv2.cvtColor(back, cv2.COLOR_BGR2GRAY)
-
-    #plot2d(back)
-
-    holo = calc_holo(200 * um, 0)
-    to_slm(holo)
-
     _, shot = cap.read()
     shot = cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
-    #plot2d(shot)
+    shot = np.asarray(shot, dtype='int16')
+    plot2d(shot)
+    cap.release()
 
     delta = np.abs(shot - back)
-    print(delta.dtype)
+
     xc, yc = find_center(delta)
-    print(xc, yc)
+
     plot2d(delta)
