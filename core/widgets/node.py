@@ -1,3 +1,5 @@
+import time
+
 import customtkinter as ctk
 
 
@@ -8,12 +10,14 @@ class Wire:
         self.output_socket = output_socket
         self.wire = wire
 
-    def translate(self, value):
-        self.output_socket.fill_value(value)
 
     def move(self):
         self.master.coords(self.wire, self.input_socket.x, self.input_socket.y, self.output_socket.x,
                            self.output_socket.y)
+
+    def fill(self, value):
+        print('Wire')
+        self.input_socket.fill(value)
 
 
 class Socket(ctk.CTkFrame):
@@ -26,7 +30,6 @@ class Socket(ctk.CTkFrame):
 
         self.wire = None
         self.value = None
-        self.is_filled = False
 
         self.ID = None
 
@@ -78,10 +81,9 @@ class SocketIn(Socket):
         self.canvas.tag_bind(self.ID, '<B1-Motion>', self.canvas.move_connect)
         self.canvas.tag_bind(self.ID, '<ButtonRelease>', lambda event: self.canvas.end_connect(self, event))
 
-    def fill_value(self, value):
-        self.value = value
-        self.is_filled = True
-        self.node.fill_value(value, name=self.name)
+    def fill(self, value):
+        self.node.fill(value, self.name)
+
 
 
 class SocketOut(Socket):
@@ -123,11 +125,13 @@ class SocketOut(Socket):
 
         self.canvas.tag_bind(self.ID, '<Button-1>', lambda event: self.canvas.start_connect(self, event))
         self.canvas.tag_bind(self.ID, '<B1-Motion>', self.canvas.move_connect)
-        self.canvas.tag_bind(self.ID, '<ButtonRelease>', lambda event: self.canvas.end_connect(self, event))
+        self.canvas.tag_bind(self.ID, '<ButtonRelease>', lambda event: self.canvas.end_connect(self, event))\
 
-    def fill_value(self, value):
+    def fill(self, value):
+        print('SocketOut')
         if self.wire is not None:
-            self.wire.translate(value)
+            self.wire.fill(value)
+
 
 
 class Node(ctk.CTkFrame):
@@ -166,20 +170,25 @@ class Node(ctk.CTkFrame):
 
         self.counter = 0
 
-    def func(self, kwargs):
+        self.accumulator = {}
+
+    def func(self, func_args):
         pass
 
-    def fill_value(self, value, name):
-        self.func_args[name] = value
-        self.counter += 1
+    def fill(self, value, name):
+        self.accumulator[name] = value
 
-        if self.counter == len(self.func_args):
-            self.func_results = self.func(self.func_args)
-            self.raise_results()
+        if set(self.accumulator.keys()) == set(self.func_args.keys()):
 
-    def raise_results(self):
-        for socket in self.output_sockets:
-            socket.fill_value(self.func_results[socket.name])
+            self.func_results = self.func(self.accumulator)
+            print('aadaddawd', self.func_results)
+
+            time.sleep(5)
+            for socket in self.output_sockets:
+                socket.fill(self.func_results[socket.name])
+
+
+
 
     def move(self, event):
         self.master.move(self.ID, event.x, event.y)
@@ -199,6 +208,8 @@ class Node(ctk.CTkFrame):
     def add_in(self, name='TEST'):
         socket = SocketIn(self.inputs_frame, self, self.master, name=name)
         socket.grid(pady=10, sticky='w')
+
+        self.func_args[name] = None
 
         self.input_sockets.append(socket)
 
@@ -240,19 +251,18 @@ class Source(Node):
         self.center_frame.grid_forget()
         for item in arg_names:
             self.add_out(item)
+            self.master.sources_sockets.append(self.output_sockets[-1])
 
-    def raise_result(self, value):
-        self.output_sockets[0].fill_value(value)
+class Generator(Node):
+    def __init__(self, master, name, x, y, width=100, height=100, color="#0F00F0"):
+        super().__init__(master, name, x, y, width, height, color)
+        self.inputs_frame.grid_forget()
+        self.center_frame.grid_forget()
 
 
-class NumSource(Source):
-    def __init__(self, master, arg_names, name, x, y, width=100, height=100, color="#0000CD"):
-        super().__init__(master, arg_names, name, x, y, width, height, color)
-
-        self.value = 5
-
-    def raise_result(self, value):
-        self.output_sockets[0].fill_value(self.value)
+        self.add_out('5')
+        self.master.sources_sockets.append(self.output_sockets[-1])
+        self.output_sockets[-1].fill = lambda value: 5
 
 
 class EndPoint(Node):
@@ -262,8 +272,10 @@ class EndPoint(Node):
         self.center_frame.grid_forget()
         self.add_in(name)
 
-    def fill_value(self, value, name):
+    def fill(self, value, name):
         self.master.results[name] = value
+
+
 
 
 class NodeBoard(ctk.CTkCanvas):
@@ -271,6 +283,7 @@ class NodeBoard(ctk.CTkCanvas):
         super().__init__(master, bg=bg, width=width, height=height, bd=0, highlightthickness=0)
 
         self.sources = []
+        self.sources_sockets = []
         self.nodes = []
         self.end_points = []
         self.results = {}
@@ -290,10 +303,9 @@ class NodeBoard(ctk.CTkCanvas):
 
         self.add_node(PlusNode)
 
-        self.add_source(['5'], 'NUM', NumSource)
-        self.add_source(['5'], 'NUM', NumSource)
-
         self.add_end('END')
+
+        self.add_source(['5',  'SOS', 'adad'],'NAME', Source)
 
         self.hold = False
 
@@ -305,14 +317,13 @@ class NodeBoard(ctk.CTkCanvas):
 
         self.hold_type = None
 
-        self.master.bind("<z>", lambda event: self.execute(event, {'5': 5}))
+        self.master.bind("<z>", lambda event: self.execute(event, {'5': 5, 'SOS': 7, 'adad': 1}))
+        self.master.bind("<x>",  lambda event : print(self.results))
 
-    def execute(self, event, sources_dict):
-        print('adad')
-        for item in self.sources:
-            item.raise_result(sources_dict[item.name])
+    def execute(self,event, func_args):
+        for socket in self.sources_sockets:
+            socket.fill(func_args[socket.name])
 
-        return self.results
 
     def start_connect(self, socket, event):
         self.hold = True
@@ -372,6 +383,18 @@ class NodeBoard(ctk.CTkCanvas):
         node.ID = ID
 
         self.sources.append(node)
+
+        node.start()
+
+
+    def add_generator(self, name, class_type):
+        node = class_type(self, name, self.start_x, self.start_y)
+
+        ID = self.create_window(self.start_x, self.start_y, window=node, anchor="nw")
+        node.ID = ID
+
+        self.sources.append(node)
+
         node.start()
 
     def add_end(self, name, color='#CD0000'):
