@@ -80,11 +80,11 @@ if __name__ == '__main__':
 
     x_traps = []
     y_traps = []
-
     for ix in x_line:
         for iy in y_line:
             x_traps.append(ix)
             y_traps.append(iy)
+
 
 
     x_traps = np.asarray(x_traps)

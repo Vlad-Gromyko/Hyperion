@@ -45,6 +45,19 @@ def to_pixels(array):
     result = np.asarray(array / 2 / np.pi * 255, dtype='uint8')
     return result
 
+def to_slm(image):
+    image = to_pixels(image)
+    screen_id = 1
+    screen = screeninfo.get_monitors()[screen_id]
+
+    cv2.namedWindow('SLM', cv2.WND_PROP_FULLSCREEN)
+    cv2.moveWindow('SLM', screen.x - 1, screen.y - 1)
+    cv2.setWindowProperty('SLM', cv2.WND_PROP_FULLSCREEN,
+                          cv2.WINDOW_FULLSCREEN)
+
+    cv2.imshow('SLM', image)
+    cv2.waitKey(1)
+
 
 def find_center(image):
     res_y, res_x = np.shape(image)
@@ -59,18 +72,7 @@ def find_center(image):
     return x_c, y_c
 
 
-def to_slm(image):
-    image = to_pixels(image)
-    screen_id = 1
-    screen = screeninfo.get_monitors()[screen_id]
 
-    cv2.namedWindow('SLM', cv2.WND_PROP_FULLSCREEN)
-    cv2.moveWindow('SLM', screen.x - 1, screen.y - 1)
-    cv2.setWindowProperty('SLM', cv2.WND_PROP_FULLSCREEN,
-                          cv2.WINDOW_FULLSCREEN)
-
-    cv2.imshow('SLM', image)
-    cv2.waitKey(1)
 
 
 
