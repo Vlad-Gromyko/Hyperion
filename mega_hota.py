@@ -18,7 +18,7 @@ def plot2d(array):
 
 
 @numba.njit(fastmath=True, parallel=True)
-def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
+def mega_HOTA(x_list, y_list, x_mesh, y_mesh, user_weights, initial_phase, iterations):
     num_traps = len(user_weights)
     v_list = np.zeros_like(user_weights, dtype=np.complex128)
     area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
@@ -26,13 +26,8 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
 
     w_list = np.ones(num_traps)
 
-    _x = x_mesh
-    _y = y_mesh
-
-    lattice = 2 * np.pi / wave / focus
-
-    for i in numba.prange(num_traps):
-        trap = lattice * (x_list[i] * _x + y_list[i] * _y)
+    for i in range(num_traps):
+        trap = (x_list[i] * x_mesh + y_list[i] * y_mesh) % (2 * np.pi)
         v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
 
     anti_user_weights = 1 / user_weights
@@ -45,13 +40,13 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
 
         summ = np.zeros_like(initial_phase, dtype=np.complex128)
         for ip in range(num_traps):
-            trap = lattice * (x_list[ip] * _x + y_list[ip] * _y)
+            trap = (x_list[ip] * x_mesh + y_list[ip] * y_mesh) % (2 * np.pi)
             summ = summ + np.exp(1j * trap) * user_weights[ip] * v_list[ip] * w_list[ip] / np.abs(
                 v_list[ip])
         phase = np.angle(summ)
 
-        for iv in numba.prange(num_traps):
-            trap = lattice * (x_list[iv] * _x + y_list[iv] * _y)
+        for iv in range(num_traps):
+            trap = (x_list[iv] * x_mesh + y_list[iv] * y_mesh) % (2 * np.pi)
             v_list[iv] = 1 / area * np.sum(np.exp(1j * (phase - trap)))
     return phase
 
@@ -66,8 +61,8 @@ Y_D = 120 * um
 X_C = 1000 * um
 Y_C = 0
 
-X_N = 150
-Y_N = 150
+X_N = 2
+Y_N = 3
 
 WIDTH = 1920
 HEIGHT = 1200
@@ -93,8 +88,14 @@ if __name__ == '__main__':
     _y = np.linspace(-HEIGHT // 2 * PIXEL, HEIGHT // 2 * PIXEL, HEIGHT)
     _x, _y = np.meshgrid(_x, _y)
 
+    lattice = 2 * np.pi / WAVE / FOCUS
+
+    _x, _y = _x * lattice, _y * lattice
+
     start = time.time()
-    mega = mega_HOTA(x_line, y_line, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS)
+    mega = mega_HOTA(x_line, y_line, _x, _y, users, starter, ITERATIONS)
 
     t1 = time.time()
     print('END', t1 - start)
+
+    plot2d(mega)
