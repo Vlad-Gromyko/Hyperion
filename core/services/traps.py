@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 from functools import lru_cache
 import numpy as np
+import numba
 
 
 class TrapsEditor(Service):
@@ -183,26 +184,12 @@ class TrapsEditor(Service):
         for i in range(self.sheet.get_total_rows()):
             spec = self.sheet[i].data
             if spec[0] != '' and spec[1] != '' and spec[2] != '' and spec[3] != '':
-                holo = self.calc_holo(spec[0], spec[1], spec[2], wave, focus, pitch, width, height)
+                holo = calc_holo(spec[0], spec[1], spec[2], wave, focus, pitch, width, height)
                 traps.append(holo)
                 weights.append(float(spec[3]))
+
         return np.asarray(traps), np.asarray(weights)
 
-    @lru_cache
-    def calc_holo(self, x, y, z, wave, focus, d, width, height):
-        x *= 10 ** -6
-        y *= 10 ** -6
-        z *= 10 ** -6
-
-        _x = np.linspace(- width // 2 * d, width // 2 * d, width)
-        _y = np.linspace(-height // 2 * d, height // 2 * d, height)
-
-        _x, _y = np.meshgrid(_x, _y)
-
-        sphere = np.pi * z / wave / focus / focus * (_x * _x + _y * _y)
-        lattice = 2 * np.pi / wave / focus * (x * _x + y * _y)
-        holo = (sphere + lattice) % (2 * np.pi)
-        return holo
 
     def add_array(self):
         x_c = float(self.x_c.get())
@@ -236,3 +223,20 @@ class TrapsEditor(Service):
         if current_selection:
             box = current_selection.row
             self.sheet.delete_row(box)
+
+
+@lru_cache
+def calc_holo(x, y, z, wave, focus, d, width, height):
+    x *= 10 ** -6
+    y *= 10 ** -6
+    z *= 10 ** -6
+
+    _x = np.linspace(- width // 2 * d, width // 2 * d, width)
+    _y = np.linspace(-height // 2 * d, height // 2 * d, height)
+
+    _x, _y = np.meshgrid(_x, _y)
+
+    sphere = np.pi * z / wave / focus / focus * (_x * _x + _y * _y)
+    lattice = 2 * np.pi / wave / focus * (x * _x + y * _y)
+    holo = (sphere + lattice) % (2 * np.pi)
+    return holo
