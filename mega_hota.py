@@ -18,7 +18,7 @@ def plot2d(array):
 
 
 @numba.njit(fastmath=True, parallel=True)
-def mega_HOTA(x_list, y_list, x_mesh, y_mesh, width, height, d, wave, focus, user_weights, initial_phase, iterations):
+def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
     num_traps = len(user_weights)
     v_list = np.zeros_like(user_weights, dtype=np.complex128)
     area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
@@ -56,19 +56,6 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, width, height, d, wave, focus, use
     return phase
 
 
-@lru_cache
-def calc_holo(x, y, wave, focus, d, width, height):
-    _x = np.linspace(- width // 2 * d, width // 2 * d, width)
-    _y = np.linspace(-height // 2 * d, height // 2 * d, height)
-
-    _x, _y = np.meshgrid(_x, _y)
-
-    lattice = 2 * np.pi / wave / focus * (x * _x + y * _y)
-
-    holo = lattice % (2 * np.pi)
-    return holo
-
-
 mm = 10 ** -3
 um = 10 ** -6
 nm = 10 ** -9
@@ -79,8 +66,8 @@ Y_D = 120 * um
 X_C = 1000 * um
 Y_C = 0
 
-X_N = 100
-Y_N = 100
+X_N = 150
+Y_N = 150
 
 WIDTH = 1920
 HEIGHT = 1200
@@ -107,11 +94,7 @@ if __name__ == '__main__':
     _x, _y = np.meshgrid(_x, _y)
 
     start = time.time()
-    mega = mega_HOTA(x_line, y_line, _x, _y, WIDTH, HEIGHT, PIXEL, WAVE, FOCUS, users, starter, ITERATIONS)
+    mega = mega_HOTA(x_line, y_line, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS)
 
     t1 = time.time()
     print('END', t1 - start)
-
-    mega = mega_HOTA(x_line, y_line, _x, _y, WIDTH, HEIGHT, PIXEL, WAVE, FOCUS, users, starter, ITERATIONS)
-    t2 = time.time()
-    print('END', t2 - t1)
