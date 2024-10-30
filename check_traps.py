@@ -116,13 +116,110 @@ def calc_holo(x, y):
 def back():
     holo = calc_holo(0, 2000 * um)
     to_slm(holo)
-    return take_shot()
+    shot = take_shot()
+    return shot
+
+
+def draw(x_list, y_list, image):
+    image = np.asarray(image, dtype='uint8')
+    image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+    b, g, r = cv2.split(image)
+    for i in range(len(x_list)):
+        image = cv2.circle(image, (x_list[i], y_list[i]), RADIUS, (0, 255, 0), 1)
+
+    return image
+
+
+def intensity(x, y, radius, shot):
+    mask = masked(x, y, radius, shot)
+    shot *= mask
+
+    return np.max(shot)
+
+
+def masked(x, y, radius, array):
+    height, width = np.shape(array)
+    mask = np.zeros_like(array)
+
+    for iy in range(height):
+        for ix in range(width):
+            if (ix - x) ** 2 + (iy - y) ** 2 <= radius ** 2:
+                mask[iy, ix] = 1
+
+    return mask
+
+
+def uniformity(v_list):
+    return 1 - (np.max(v_list) - np.min(v_list)) / (np.max(v_list) + np.min(v_list))
+
+
+
+
+def mega_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, user_weights, initial_phase,
+              iterations):
+
+    history = []
+
+    background = back()
+    num_traps = len(user_weights)
+    v_list = np.zeros_like(user_weights)
+    area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
+    phase = np.zeros_like(initial_phase)
+
+    w_list = np.ones(num_traps)
+
+    lattice = 2 * np.pi / wave / focus
+    print('start')
+    for i in range(num_traps):
+        trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
+        v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
+
+    anti_user_weights = 1 / user_weights
+
+    for k in range(iterations):
+        w_list_before = w_list
+        avg = np.average( v_list,weights=anti_user_weights)
+
+        w_list = avg * user_weights * w_list_before / v_list
+
+        summ = np.zeros_like(initial_phase, dtype=np.complex128)
+        for ip in range(num_traps):
+            trap = (lattice * (x_list[ip] * x_mesh + y_list[ip] * y_mesh)) % (2 * np.pi)
+            summ = summ + np.exp(1j * trap) * user_weights[ip] * w_list[ip]
+
+        phase = np.angle(summ) + np.pi
+        to_slm(phase)
+
+        shot = take_shot()
+        cv2.imshow('HOTA', shot)
+
+        cv2.waitKey(1)
+
+        for iv in range(num_traps):
+            v_list[iv] = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background)))
+
+
+        history.append(uniformity(v_list**2))
+
+        plt.clf()
+
+        plt.plot([i for i in range(len(history))], history)
+
+        plt.draw()
+        plt.gcf().canvas.flush_events()
+
+        print(v_list)
+        print('I`m in HOTA', k)
+    return phase
 
 
 def register_traps(x_list, y_list, back_shot):
     x_spots = []
     y_spots = []
 
+    to_show = np.zeros_like(back_shot)
+    array = back_shot
     for i in range(len(x_list)):
         holo = calc_holo(x_list[i], y_list[i])
 
@@ -135,53 +232,26 @@ def register_traps(x_list, y_list, back_shot):
         x_spots.append(x)
         y_spots.append(y)
 
+        print(i + 1)
+
+    array = draw(x_spots, y_spots, array)
+
+    # cv2.imshow('YOOOO', array)
+    # cv2.waitKey(0)
 
     return x_spots, y_spots
 
-def draw_trap(c_x, c_y, array):
 
-    array = cv2.cvtColor(array, cv2.COLOR_GRAY2BGR)
-
-    array = cv2.circle(array, (c_x, c_y), RADIUS, (0, 255, 0), 1)
-    b, g, r = cv2.split(array)
-
-    b[int(c_y)] = 0
-    b[:, int(c_x)] = 0
-
-    g[int(c_y)] = 255
-    g[:, int(c_x)] = 255
-
-    r[int(c_y)] = 0
-    r[:, int(c_x)] = 0
-
-    array =  cv2.merge([b, g, r])
-
-    return array
-
-def draw_traps(c_x_list, c_y_list, array):
-
-    draw = np.zeros_like(array)
-
-    for i in range(len(c_x_list)):
-        draw = draw_trap(c_x_list[i], c_y_list, draw)
-
-    cv2.imshow('TRAPS', draw)
-
-
-
-
-
-
-RADIUS = 3
+RADIUS = 10
 
 mm = 10 ** -3
 um = 10 ** -6
 nm = 10 ** -9
 
-X_D = 120 * um
-Y_D = 120 * um
+X_D = 100 * um
+Y_D = 100 * um
 
-X_C = 0 * um
+X_C = 1000 * um
 Y_C = 0
 
 X_N = 2
@@ -222,5 +292,12 @@ if __name__ == '__main__':
     _y = np.linspace(-HEIGHT // 2 * PIXEL, HEIGHT // 2 * PIXEL, HEIGHT)
     _x, _y = np.meshgrid(_x, _y)
 
-    #mega = back_HOTA(x_traps, y_traps, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS)
+    plt.ion()
 
+    mega = mega_HOTA(x_traps, y_traps, x_reg, y_reg, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS)
+
+    plt.ioff()
+
+    plot2d(take_shot())
+
+    plt.show()
