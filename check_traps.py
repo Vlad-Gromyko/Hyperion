@@ -8,6 +8,42 @@ import screeninfo
 import time
 
 
+@numba.njit(fastmath=True, parallel=True)
+def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
+    num_traps = len(user_weights)
+    v_list = np.zeros_like(user_weights, dtype=np.complex128)
+    area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
+    phase = np.zeros_like(initial_phase)
+
+    w_list = np.ones(num_traps)
+
+    lattice = 2 * np.pi / wave / focus
+
+    for i in range(num_traps):
+        trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
+        v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
+
+    anti_user_weights = 1 / user_weights
+
+    for k in range(iterations):
+        w_list_before = w_list
+        avg = np.average(np.abs(v_list), weights=anti_user_weights)
+
+        w_list = avg / np.abs(v_list) * user_weights * w_list_before
+
+        summ = np.zeros_like(initial_phase, dtype=np.complex128)
+        for ip in range(num_traps):
+            trap = (lattice * (x_list[ip] * x_mesh + y_list[ip] * y_mesh)) % (2 * np.pi)
+            summ = summ + np.exp(1j * trap) * user_weights[ip] * v_list[ip] * w_list[ip] / np.abs(
+                v_list[ip])
+        phase = np.angle(summ)
+
+        for iv in range(num_traps):
+            trap = (lattice * (x_list[iv] * x_mesh + y_list[iv] * y_mesh)) % (2 * np.pi)
+            v_list[iv] = 1 / area * np.sum(np.exp(1j * (phase - trap)))
+    return phase, w_list, v_list
+
+
 def plot2d(array):
     fig, ax = plt.subplots()
     im = ax.imshow(array, cmap='hot')
@@ -75,8 +111,13 @@ def take_shot():
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    shots = []
+    for i in range(SHOTS):
+        _, shot = cap.read()
+        shots.append(shot)
 
-    _, shot = cap.read()
+    shot = np.average(shots, axis=0)
+    shot = np.asarray(shot, dtype='uint8')
     shot = cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
     shot = np.asarray(shot, dtype='int16')
     cap.release()
@@ -134,7 +175,13 @@ def draw(x_list, y_list, image):
 def intensity(x, y, radius, shot):
     mask = masked(x, y, radius, shot)
     shot *= mask
+    show = np.asarray(shot, dtype='uint8')
+    show = cv2.cvtColor(show, cv2.COLOR_GRAY2BGR)
 
+    show = cv2.circle(show, (x, y), RADIUS, (0, 255, 0), 1)
+
+    cv2.imshow('TRAP', show)
+    cv2.waitKey(1)
     return np.max(shot)
 
 
@@ -154,34 +201,55 @@ def uniformity(v_list):
     return 1 - (np.max(v_list) - np.min(v_list)) / (np.max(v_list) + np.min(v_list))
 
 
+def show_us(name, array):
+    cv2.imshow(name, array)
+    cv2.waitKey(1)
 
 
-def mega_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, user_weights, initial_phase,
-              iterations):
-
+def exp_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, user_weights, initial_phase,
+             iterations1, iterations2):
     history = []
 
     background = back()
     num_traps = len(user_weights)
-    v_list = np.zeros_like(user_weights)
+    v_list = np.zeros_like(user_weights, dtype='complex128')
     area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
     phase = np.zeros_like(initial_phase)
 
-    w_list = np.ones(num_traps)
+    w_list = np.ones(num_traps, dtype='float64')
 
     lattice = 2 * np.pi / wave / focus
-    print('start')
+    print('start1')
     for i in range(num_traps):
         trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
         v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
 
     anti_user_weights = 1 / user_weights
+    print('start2')
+    prepare, w_list, v_list = mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations1)
+    prepare = prepare + np.pi
+    starter = prepare
+    to_slm(prepare)
+    shot = take_shot()
 
-    for k in range(iterations):
+    '''
+    for iv in range(num_traps):
+        value = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background)))
+        if value == 0:
+            value = 0.1
+        v_list[iv] = value
+        
+    '''
+
+    v_list = v_list / np.max(np.abs(v_list))
+
+    for k in range(iterations2):
         w_list_before = w_list
-        avg = np.average( v_list,weights=anti_user_weights)
+        avg = np.average(np.abs(v_list), weights=anti_user_weights)
 
-        w_list = avg * user_weights * w_list_before / v_list
+        print()
+
+        w_list = avg / np.abs(v_list) * user_weights * w_list_before
 
         summ = np.zeros_like(initial_phase, dtype=np.complex128)
         for ip in range(num_traps):
@@ -192,15 +260,17 @@ def mega_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus,
         to_slm(phase)
 
         shot = take_shot()
-        cv2.imshow('HOTA', shot)
 
-        cv2.waitKey(1)
 
         for iv in range(num_traps):
-            v_list[iv] = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background)))
+            value = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background)))
+            if value == 0:
+                value = 0.1
+            v_list[iv] = value
 
+        v_list = v_list / np.max(np.abs(v_list))
 
-        history.append(uniformity(v_list**2))
+        history.append(uniformity(np.abs(v_list ** 2)))
 
         plt.clf()
 
@@ -209,7 +279,7 @@ def mega_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus,
         plt.draw()
         plt.gcf().canvas.flush_events()
 
-        print(v_list)
+        print((np.abs(v_list)))
         print('I`m in HOTA', k)
     return phase
 
@@ -243,6 +313,7 @@ def register_traps(x_list, y_list, back_shot):
 
 
 RADIUS = 10
+SHOTS = 5
 
 mm = 10 ** -3
 um = 10 ** -6
@@ -254,8 +325,8 @@ Y_D = 100 * um
 X_C = 1000 * um
 Y_C = 0
 
-X_N = 2
-Y_N = 2
+X_N = 3
+Y_N = 3
 
 WIDTH = 1920
 HEIGHT = 1200
@@ -264,7 +335,8 @@ PIXEL = 8 * um
 FOCUS = 100 * mm
 WAVE = 850 * nm
 
-ITERATIONS = 30
+ITERATIONS_1 = 50
+ITERATIONS_2 = 25
 
 if __name__ == '__main__':
     x_line = [X_C - X_D * (X_N - 1) / 2 + X_D * i for i in range(X_N)]
@@ -294,7 +366,7 @@ if __name__ == '__main__':
 
     plt.ion()
 
-    mega = mega_HOTA(x_traps, y_traps, x_reg, y_reg, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS)
+    mega = exp_HOTA(x_traps, y_traps, x_reg, y_reg, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS_1, ITERATIONS_2)
 
     plt.ioff()
 
