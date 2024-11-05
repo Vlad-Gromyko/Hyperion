@@ -6,7 +6,7 @@ import numba
 import cv2
 import screeninfo
 import time
-
+import copy
 
 @numba.njit(fastmath=True, parallel=True)
 def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
@@ -70,7 +70,7 @@ def back_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
     anti_user_weights = 1 / user_weights
 
     for k in range(iterations):
-        w_list_before = w_list
+        w_list_before = copy.deepcopy(w_list)
         avg = np.average(np.abs(v_list), weights=anti_user_weights)
 
         w_list = avg / np.abs(v_list) * user_weights * w_list_before
@@ -220,13 +220,15 @@ def exp_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, 
 
     lattice = 2 * np.pi / wave / focus
     print('start1')
+    '''
     for i in range(num_traps):
         trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
         v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
-
+    '''
     anti_user_weights = 1 / user_weights
     print('start2')
-    prepare, w_list, v_list = mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations1)
+    prepare, w_list, v_list = mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase,
+                                        iterations1)
     prepare = prepare + np.pi
     starter = prepare
     to_slm(prepare)
@@ -261,7 +263,6 @@ def exp_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, 
 
         shot = take_shot()
 
-
         for iv in range(num_traps):
             value = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background)))
             if value == 0:
@@ -274,7 +275,7 @@ def exp_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, 
 
         plt.clf()
 
-        plt.plot([i for i in range(len(history))], history)
+        plt.plot([i for i in range(len(        history))], history)
 
         plt.draw()
         plt.gcf().canvas.flush_events()
