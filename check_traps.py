@@ -8,6 +8,7 @@ import screeninfo
 import time
 import copy
 
+
 @numba.njit(fastmath=True, parallel=True)
 def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
     num_traps = len(user_weights)
@@ -207,7 +208,7 @@ def show_us(name, array):
 
 
 def exp_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, user_weights, initial_phase,
-             iterations1, iterations2):
+             iterations):
     history = []
 
     background = back()
@@ -219,37 +220,26 @@ def exp_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, 
     w_list = np.ones(num_traps, dtype='float64')
 
     lattice = 2 * np.pi / wave / focus
-    print('start1')
-    '''
+
     for i in range(num_traps):
         trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
         v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
-    '''
+
     anti_user_weights = 1 / user_weights
-    print('start2')
-    prepare, w_list, v_list = mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase,
-                                        iterations1)
-    prepare = prepare + np.pi
-    starter = prepare
-    to_slm(prepare)
-    shot = take_shot()
 
     '''
     for iv in range(num_traps):
-        value = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background)))
-        if value == 0:
-            value = 0.1
+        value = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background))) + 1
         v_list[iv] = value
-        
-    '''
 
     v_list = v_list / np.max(np.abs(v_list))
+    
+    '''
 
-    for k in range(iterations2):
+    for k in range(iterations):
         w_list_before = w_list
         avg = np.average(np.abs(v_list), weights=anti_user_weights)
 
-        print()
 
         w_list = avg / np.abs(v_list) * user_weights * w_list_before
 
@@ -265,17 +255,17 @@ def exp_HOTA(x_list, y_list, x_centers, y_centers, x_mesh, y_mesh, wave, focus, 
 
         for iv in range(num_traps):
             value = np.sqrt(intensity(x_centers[iv], y_centers[iv], RADIUS, np.abs(shot - background)))
-            if value == 0:
-                value = 0.1
             v_list[iv] = value
+
+        v_list = v_list + 1000
 
         v_list = v_list / np.max(np.abs(v_list))
 
-        history.append(uniformity(np.abs(v_list ** 2)))
+        history.append(uniformity(np.abs((v_list - 1000) ** 2)))
 
         plt.clf()
 
-        plt.plot([i for i in range(len(        history))], history)
+        plt.plot([i for i in range(len(history))], history)
 
         plt.draw()
         plt.gcf().canvas.flush_events()
@@ -336,8 +326,7 @@ PIXEL = 8 * um
 FOCUS = 100 * mm
 WAVE = 850 * nm
 
-ITERATIONS_1 = 50
-ITERATIONS_2 = 25
+ITERATIONS = 300
 
 if __name__ == '__main__':
     x_line = [X_C - X_D * (X_N - 1) / 2 + X_D * i for i in range(X_N)]
@@ -367,7 +356,7 @@ if __name__ == '__main__':
 
     plt.ion()
 
-    mega = exp_HOTA(x_traps, y_traps, x_reg, y_reg, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS_1, ITERATIONS_2)
+    mega = exp_HOTA(x_traps, y_traps, x_reg, y_reg, _x, _y, WAVE, FOCUS, users, starter, ITERATIONS)
 
     plt.ioff()
 
