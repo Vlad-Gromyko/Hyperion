@@ -10,7 +10,7 @@ from typing import Union, List, Tuple, Iterable
 from abc import ABC, abstractmethod
 
 import time
-from progress.bar import FillingCirclesBar
+from progress.bar import FillingCirclesBar, Bar
 
 import LightPipes as lp
 
@@ -108,12 +108,12 @@ class TrapMachine:
         if weights is None:
             weights = [1 for i in range(self.num_traps)]
 
-        holo = np.zeros((self.slm.mesh.height, self.slm.mesh.width))
+        holo = np.zeros((self.slm.mesh.height, self.slm.mesh.width), dtype='complex128')
 
         for counter, iw in enumerate(weights):
-            holo += self.trap(self.x_traps[counter], self.y_traps[counter])
-
-        return holo % (2 * np.pi)
+            holo += np.exp(1j * self.trap(self.x_traps[counter], self.y_traps[counter])) * iw
+        holo = np.angle(holo)
+        return holo + np.pi
 
 
 class Camera:
@@ -142,11 +142,6 @@ class Camera:
         return shot
 
 
-class Simulator:
-    def __init__(self, ):
-        pass
-
-
 class TrapVision:
     def __init__(self, camera: Camera, trap_machine: TrapMachine, slm: SLM, search_radius=5):
         self.camera = camera
@@ -162,7 +157,9 @@ class TrapVision:
         self.to_show = None
 
     def register(self):
-        bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
+
+        plt.ion()
+        # bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
         back_holo = self.trap_machine.holo_trap(0, 2000 * UM)
         self.slm.translate(back_holo)
 
@@ -180,9 +177,17 @@ class TrapVision:
             x, y = self.find_trap(np.abs(self.back - shot))
             self.registered_x.append(x)
             self.registered_y.append(y)
-            bar.next()
+            print('REG ', i + 1)
+            # bar.next()
 
-        bar.finish()
+            plt.clf()
+
+            plt.imshow(shot)
+
+            plt.draw()
+            plt.gcf().canvas.flush_events()
+
+        # bar.finish()
 
     def show_registered(self):
         show = np.asarray(self.to_show, dtype='uint8')
@@ -192,13 +197,26 @@ class TrapVision:
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 
+    def take_shot(self):
+        return self.camera.take_shot()
+
     def check_intensities(self, shot):
-        intensities = []
+        values = []
         for i in range(self.trap_machine.num_traps):
             value = self.intensity(self.registered_x[i], self.registered_y[i], shot)
-            intensities.append(value)
+            self.draw_circle(self.registered_x[i], self.registered_y[i], shot)
+            values.append(value)
 
-        return intensities
+        return values
+
+    def draw_circle(self, x, y, shot):
+        shot = shot / np.max(shot) * 255
+        shot = np.asarray(shot, dtype='uint8')
+        shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
+
+        show = cv2.circle(shot, (x, y), self.search_radius, (0, 255, 0), 1)
+        cv2.imshow('Registered Traps', show)
+        cv2.waitKey(1)
 
     @staticmethod
     def find_center(image):
@@ -210,7 +228,6 @@ class TrapVision:
 
         x_c = int(np.sum(ax * image) / np.sum(image))
         y_c = int(np.sum(ay * image) / np.sum(image))
-
         return x_c, y_c
 
     def find_trap(self, array):
@@ -232,10 +249,12 @@ class TrapVision:
 
     def intensity(self, x, y, shot):
         mask = self.masked(x, y, shot)
-        shot *= mask
-        self.to_show = self.to_show + shot
 
-        return np.max(shot)
+        self.to_show = self.to_show + shot
+        return np.max(shot * mask)
+
+    def to_slm(self, holo):
+        self.slm.translate(holo)
 
 
 class TrapSimulator(TrapVision):
@@ -247,7 +266,15 @@ class TrapSimulator(TrapVision):
         self.slm_grid_size = self.slm_grid_dim * self.slm.mesh.pitch_x
 
         self.camera_grid_dim = max(self.camera.width, self.camera.height)
-        self.camera_grid_size = self.camera_grid_dim * self.camera.pixel
+        self.camera_grid_size = self.camera_grid_dim * self.camera.pixel / 3
+
+        self.holo = None
+
+    def to_slm(self, holo):
+        self.holo = self.holo_box(holo)
+
+    def take_shot(self):
+        return self.propagate(self.holo)
 
     def propagate(self, holo):
         field = lp.Begin(self.slm_grid_size, self.trap_machine.wave,
@@ -261,10 +288,11 @@ class TrapSimulator(TrapVision):
         field = lp.Interpol(field, self.camera_grid_size,
                             self.camera_grid_dim)
         result = lp.Intensity(field)
-        return np.asarray(result / np.max(result) * 255, dtype='int16')
+        return result
 
     def register(self):
-        bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
+        plt.ion()
+        # bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
         self.back = np.zeros((self.camera_grid_dim, self.camera_grid_dim))
         self.to_show = self.back
         for i in range(self.trap_machine.num_traps):
@@ -278,8 +306,16 @@ class TrapSimulator(TrapVision):
             x, y = self.find_trap(np.abs(shot))
             self.registered_x.append(x)
             self.registered_y.append(y)
-            bar.next()
-        bar.finish()
+            # bar.next()
+            print('REG ', i + 1)
+
+            plt.clf()
+
+            plt.imshow(shot, cmap='hot')
+
+            plt.draw()
+            plt.gcf().canvas.flush_events()
+        # bar.finish()
 
     @staticmethod
     def holo_box(holo):
@@ -306,6 +342,8 @@ class Algorithm(ABC):
 
         self.iterations = iterations
 
+        self.history = {'uniformity_history': []}
+
     @abstractmethod
     def run(self):
         pass
@@ -313,30 +351,5 @@ class Algorithm(ABC):
     def on_iteration(self):
         pass
 
-    def on_start(self):
-        pass
-
-    def on_end(self):
-        pass
-
-
-class GeneticAlgorithm(Algorithm):
-    def __init__(self, slm: SLM, camera: Camera, trap_machine: TrapMachine, trap_vision: TrapVision, iterations: int):
-        super().__init__(slm, camera, trap_machine, trap_vision, iterations)
-
-    def run(self):
-        pass
-
-
-if __name__ == '__main__':
-    _slm = SLM()
-    _camera = Camera()
-    _tr = TrapMachine((0, 0), (120 * UM, 120 * UM), (3, 3), _slm)
-
-    sim = TrapSimulator(_camera, _tr, _slm)
-    sim.register()
-    sim.show_registered()
-
-    print(sim.registered_x, sim.registered_y)
-
-    cv2.waitKey(0)
+    def uniformity(self, values):
+        return 1 - (np.max(values) - np.min(values)) / (np.min(values) + np.max(values))
