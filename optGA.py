@@ -11,7 +11,7 @@ class GeneticAlgorithm(Algorithm):
                  iterations: int):
         super().__init__(slm, camera, trap_machine, trap_vision, iterations)
 
-    @profile
+    @profile(filename='ga2x2.prof')
     def run(self):
         def fitness_func(ga_instance, solution, solution_idx):
             holo = self.trap_machine.holo_traps(solution)
@@ -20,10 +20,10 @@ class GeneticAlgorithm(Algorithm):
             self.trap_vision.to_slm(holo)
             shot = self.trap_vision.take_shot()
 
-            plt.imshow(shot, cmap='hot')
-            plt.title(f'{solution_idx}')
-            plt.draw()
-            plt.gcf().canvas.flush_events()
+            #plt.imshow(shot, cmap='hot')
+            #plt.title(f'{solution_idx}')
+            #plt.draw()
+            #plt.gcf().canvas.flush_events()
 
             # self.slm.translate(holo)
 
@@ -39,9 +39,9 @@ class GeneticAlgorithm(Algorithm):
             print(f"Fitness    = {ga_instance.best_solution(pop_fitness=ga_instance.last_generation_fitness)[1]}")
 
         ga_instance = pygad.GA(num_generations=self.iterations,
-                               num_parents_mating=40,
+                               num_parents_mating=10,
                                fitness_func=fitness_function,
-                               sol_per_pop=100,
+                               sol_per_pop=20,
                                num_genes=num_genes,
                                crossover_type='single_point',
                                mutation_type='random',
@@ -62,18 +62,18 @@ class GeneticAlgorithm(Algorithm):
 if __name__ == '__main__':
     _slm = SLM()
     _camera = Camera()
-    _tr = TrapMachine((0, 0), (120 * UM, 120 * UM), (10, 10), _slm)
+    _tr = TrapMachine((0, 0), (120 * UM, 120 * UM), (2, 2), _slm)
 
     sim = TrapSimulator(_camera, _tr, _slm, search_radius=5)
     sim.register()
     # sim.show_registered()
 
-    alg = GeneticAlgorithm(_slm, _camera, _tr, sim, 100)
+    alg = GeneticAlgorithm(_slm, _camera, _tr, sim, 20)
 
     ph = alg.run()
 
     #i = sim.propagate(sim.holo_box(ph))
-    plt.ioff()
-    plt.title('Result')
+    #plt.ioff()
+    #plt.title('Result')
     #plt.imshow(i, cmap='hot')
     # plt.show()

@@ -158,7 +158,7 @@ class TrapVision:
 
     def register(self):
 
-        plt.ion()
+        #plt.ion()
         # bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
         back_holo = self.trap_machine.holo_trap(0, 2000 * UM)
         self.slm.translate(back_holo)
@@ -180,12 +180,12 @@ class TrapVision:
             print('REG ', i + 1)
             # bar.next()
 
-            plt.clf()
+           # plt.clf()
 
-            plt.imshow(shot)
+           # plt.imshow(shot)
 
-            plt.draw()
-            plt.gcf().canvas.flush_events()
+           #plt.draw()
+            #plt.gcf().canvas.flush_events()
 
         # bar.finish()
 
@@ -240,10 +240,12 @@ class TrapVision:
         height, width = np.shape(array)
         mask = np.zeros_like(array)
 
-        for iy in range(height):
-            for ix in range(width):
-                if (ix - x) ** 2 + (iy - y) ** 2 <= self.search_radius ** 2:
-                    mask[iy, ix] = 1
+        # for iy in range(height):
+        # for ix in range(width):
+        # if (ix - x) ** 2 + (iy - y) ** 2 <= self.search_radius ** 2:
+        # mask[iy, ix] = 1
+
+        mask[x - self.search_radius: x + self.search_radius, y - self.search_radius: y + self.search_radius] = 1
 
         return mask
 
@@ -270,6 +272,11 @@ class TrapSimulator(TrapVision):
 
         self.holo = None
 
+        self.field = lp.Begin(self.slm_grid_size, self.trap_machine.wave,
+                         self.slm_grid_dim)
+
+        self.field = lp.GaussBeam(self.field, self.gauss_waist)
+
     def to_slm(self, holo):
         self.holo = self.holo_box(holo)
 
@@ -277,11 +284,8 @@ class TrapSimulator(TrapVision):
         return self.propagate(self.holo)
 
     def propagate(self, holo):
-        field = lp.Begin(self.slm_grid_size, self.trap_machine.wave,
-                         self.slm_grid_dim)
-        field = lp.GaussBeam(field, self.gauss_waist)
 
-        field = lp.SubPhase(field, holo)
+        field = lp.SubPhase(self.field, holo)
         field = lp.Lens(field, self.trap_machine.focus)
         field = lp.Forvard(field, self.trap_machine.focus)
 
@@ -291,7 +295,7 @@ class TrapSimulator(TrapVision):
         return result
 
     def register(self):
-        plt.ion()
+        #plt.ion()
         # bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
         self.back = np.zeros((self.camera_grid_dim, self.camera_grid_dim))
         self.to_show = self.back
@@ -309,12 +313,12 @@ class TrapSimulator(TrapVision):
             # bar.next()
             print('REG ', i + 1)
 
-            plt.clf()
+            #plt.clf()
 
-            plt.imshow(shot, cmap='hot')
+            #plt.imshow(shot, cmap='hot')
 
-            plt.draw()
-            plt.gcf().canvas.flush_events()
+            #plt.draw()
+            #plt.gcf().canvas.flush_events()
         # bar.finish()
 
     @staticmethod
