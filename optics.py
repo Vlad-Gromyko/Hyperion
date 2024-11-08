@@ -104,6 +104,7 @@ class TrapMachine:
     def holo_trap(self, x_trap, y_trap):
         return self.trap(x_trap, y_trap) % (2 * np.pi)
 
+
     def holo_traps(self, weights=None):
         if weights is None:
             weights = [1 for i in range(self.num_traps)]
@@ -125,6 +126,7 @@ class Camera:
         self.height = height
         self.pixel = pixel
 
+
     def take_shot(self):
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.height)
@@ -140,6 +142,30 @@ class Camera:
         shot = np.asarray(shot, dtype='int16')
         cap.release()
         return shot
+
+class CoolCamera(Camera):
+    def __init__(self, port: int = 0, num_shots: int = 1, width: int = 1280, height: int = 720, pixel: float = 3 * UM):
+        super().__init__(port, num_shots, width, height, pixel)
+
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.height)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.width)
+
+    def take_shot(self):
+        shots = []
+        for i in range(self.num_shots):
+            _, shot = self.cap.read()
+            shots.append(shot)
+
+        shot = np.average(shots, axis=0)
+        shot = np.asarray(shot, dtype='uint8')
+        shot = cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
+        shot = np.asarray(shot, dtype='int16')
+        return shot
+
+    def __del__(self):
+        self.cap.release()
+
 
 
 class TrapVision:
@@ -204,7 +230,7 @@ class TrapVision:
         values = []
         for i in range(self.trap_machine.num_traps):
             value = self.intensity(self.registered_x[i], self.registered_y[i], shot)
-            self.draw_circle(self.registered_x[i], self.registered_y[i], shot)
+            #self.draw_circle(self.registered_x[i], self.registered_y[i], shot)
             values.append(value)
 
         return values

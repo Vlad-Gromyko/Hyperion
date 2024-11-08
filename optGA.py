@@ -5,13 +5,15 @@ from profilehooks import profile
 from optics import *
 import pygad
 
+from optics import CoolCamera
+
 
 class GeneticAlgorithm(Algorithm):
-    def __init__(self, slm: SLM, camera: Camera, trap_machine: TrapMachine, trap_vision: TrapSimulator,
+    def __init__(self, slm: SLM, camera: Camera, trap_machine: TrapMachine, trap_vision: Union[TrapSimulator, TrapVision],
                  iterations: int):
         super().__init__(slm, camera, trap_machine, trap_vision, iterations)
 
-    @profile(filename='ga2x2.prof')
+    @profile(filename='ga2x2camera.prof')
     def run(self):
         def fitness_func(ga_instance, solution, solution_idx):
             holo = self.trap_machine.holo_traps(solution)
@@ -61,10 +63,10 @@ class GeneticAlgorithm(Algorithm):
 
 if __name__ == '__main__':
     _slm = SLM()
-    _camera = Camera()
+    _camera = CoolCamera()
     _tr = TrapMachine((0, 0), (120 * UM, 120 * UM), (2, 2), _slm)
 
-    sim = TrapSimulator(_camera, _tr, _slm, search_radius=5)
+    sim = TrapVision(_camera, _tr, _slm, search_radius=5)
     sim.register()
     # sim.show_registered()
 
