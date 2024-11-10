@@ -1,4 +1,5 @@
 import numpy as np
+import numba
 
 import cv2
 import screeninfo
@@ -104,6 +105,17 @@ class TrapMachine:
     def holo_trap(self, x_trap, y_trap):
         return self.trap(x_trap, y_trap) % (2 * np.pi)
 
+    def phase_holo_traps(self, weights):
+        if weights is None:
+            weights = [0 for i in range(self.num_traps)]
+
+        holo = np.zeros((self.slm.mesh.height, self.slm.mesh.width), dtype='complex128')
+
+        for counter, iw in enumerate(weights):
+            holo += np.exp(1j * self.trap(self.x_traps[counter], self.y_traps[counter]) + iw)
+        holo = np.angle(holo)
+        return holo + np.pi
+
 
     def holo_traps(self, weights=None):
         if weights is None:
@@ -116,6 +128,63 @@ class TrapMachine:
         holo = np.angle(holo)
         return holo + np.pi
 
+    def numba_holo_traps(self, weights=None):
+        return numba_kernel(self.x_traps, self.y_traps, weights, self.wave, self.focus, self.slm.mesh.x,
+                            self.slm.mesh.y, self.slm.mesh.width, self.slm.mesh.height)
+
+    def numba_true(self, weights):
+        return (mega_HOTA(self.x_traps, self.y_traps, self.slm.mesh.x, self.slm.mesh.y,
+                         self.wave, self.focus, weights, np.zeros((self.slm.mesh.height, self.slm.mesh.width)), 10)
+                + np.pi)
+
+@numba.njit(fastmath=True, parallel=True)
+def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
+    num_traps = len(user_weights)
+    v_list = np.zeros_like(user_weights, dtype=np.complex128)
+    area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
+    phase = np.zeros_like(initial_phase)
+
+    w_list = np.ones(num_traps)
+
+    lattice = 2 * np.pi / wave / focus
+
+    for i in range(num_traps):
+        trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
+        v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
+
+    anti_user_weights = 1 / user_weights
+
+    for k in range(iterations):
+        w_list_before = w_list
+        avg = np.average(np.abs(v_list), weights=anti_user_weights)
+
+        w_list = avg / np.abs(v_list) * user_weights * w_list_before
+
+        summ = np.zeros_like(initial_phase, dtype=np.complex128)
+        for ip in range(num_traps):
+            trap = (lattice * (x_list[ip] * x_mesh + y_list[ip] * y_mesh)) % (2 * np.pi)
+            summ = summ + np.exp(1j * trap) * user_weights[ip] * v_list[ip] * w_list[ip] / np.abs(
+                v_list[ip])
+        phase = np.angle(summ)
+
+        for iv in range(num_traps):
+            trap = (lattice * (x_list[iv] * x_mesh + y_list[iv] * y_mesh)) % (2 * np.pi)
+            v_list[iv] = 1 / area * np.sum(np.exp(1j * (phase - trap)))
+    return phase
+
+
+
+
+@numba.njit(fastmath=True)
+def numba_kernel(x_traps, y_traps, weights, wave, focus, x, y, width, height):
+    holo = np.zeros((height, width), dtype='complex128')
+
+    for counter, iw in enumerate(weights):
+        trap = 2 * np.pi / wave / focus * (x_traps[counter] * x + y_traps[counter] * y)
+        holo += np.exp(1j * trap) * iw
+    holo = np.angle(holo)
+    return holo + np.pi
+
 
 class Camera:
     def __init__(self, port: int = 0, num_shots: int = 5, width: int = 1280, height: int = 720, pixel: float = 3 * UM):
@@ -125,7 +194,6 @@ class Camera:
         self.width = width
         self.height = height
         self.pixel = pixel
-
 
     def take_shot(self):
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -142,6 +210,7 @@ class Camera:
         shot = np.asarray(shot, dtype='int16')
         cap.release()
         return shot
+
 
 class CoolCamera(Camera):
     def __init__(self, port: int = 0, num_shots: int = 1, width: int = 1280, height: int = 720, pixel: float = 3 * UM):
@@ -167,9 +236,8 @@ class CoolCamera(Camera):
         self.cap.release()
 
 
-
 class TrapVision:
-    def __init__(self, camera: Camera, trap_machine: TrapMachine, slm: SLM, search_radius=5):
+    def __init__(self, camera: Camera, trap_machine: TrapMachine, slm: SLM, search_radius=5, gauss_waist=1*MM):
         self.camera = camera
         self.trap_machine = trap_machine
         self.slm = slm
@@ -178,13 +246,31 @@ class TrapVision:
         self.registered_y = []
 
         self.search_radius = search_radius
+        self.gauss_waist=gauss_waist
 
         self.back = None
         self.to_show = None
+        self.sum_field = np.zeros((self.camera.height, self.camera.width))
+
+    @staticmethod
+    def holo_box(holo):
+        rows, cols = holo.shape
+
+        size = max(rows, cols)
+
+        square_array = np.zeros((size, size), dtype=holo.dtype)
+
+        row_offset = (size - rows) // 2
+        col_offset = (size - cols) // 2
+
+        square_array[row_offset:row_offset + rows, col_offset:col_offset + cols] = holo
+
+        return square_array
+
 
     def register(self):
 
-        #plt.ion()
+        # plt.ion()
         # bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
         back_holo = self.trap_machine.holo_trap(0, 2000 * UM)
         self.slm.translate(back_holo)
@@ -203,15 +289,17 @@ class TrapVision:
             x, y = self.find_trap(np.abs(self.back - shot))
             self.registered_x.append(x)
             self.registered_y.append(y)
-            print('REG ', i + 1)
+
+            self.sum_field = self.sum_field + shot
+            print('REG ', i + 1, 'X = ', x, 'Y = ', y)
             # bar.next()
 
-           # plt.clf()
+        # plt.clf()
 
-           # plt.imshow(shot)
+        # plt.imshow(shot)
 
-           #plt.draw()
-            #plt.gcf().canvas.flush_events()
+        # plt.draw()
+        # plt.gcf().canvas.flush_events()
 
         # bar.finish()
 
@@ -230,10 +318,10 @@ class TrapVision:
         values = []
         for i in range(self.trap_machine.num_traps):
             value = self.intensity(self.registered_x[i], self.registered_y[i], shot)
-            #self.draw_circle(self.registered_x[i], self.registered_y[i], shot)
+            self.draw_circle(self.registered_y[i], self.registered_x[i], shot)
             values.append(value)
 
-        return values
+        return np.asarray(values) / np.max(values)
 
     def draw_circle(self, x, y, shot):
         shot = shot / np.max(shot) * 255
@@ -241,6 +329,8 @@ class TrapVision:
         shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
 
         show = cv2.circle(shot, (x, y), self.search_radius, (0, 255, 0), 1)
+
+        show = cv2.resize(show, (500, 500))
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 
@@ -287,8 +377,8 @@ class TrapVision:
 
 class TrapSimulator(TrapVision):
     def __init__(self, camera: Camera, trap_machine: TrapMachine, slm: SLM, search_radius=5, gauss_waist=1 * MM):
-        super().__init__(camera, trap_machine, slm, search_radius)
-        self.gauss_waist = gauss_waist
+        super().__init__(camera, trap_machine, slm, search_radius, gauss_waist)
+
 
         self.slm_grid_dim = max(self.slm.mesh.width, self.slm.mesh.height)
         self.slm_grid_size = self.slm_grid_dim * self.slm.mesh.pitch_x
@@ -299,9 +389,11 @@ class TrapSimulator(TrapVision):
         self.holo = None
 
         self.field = lp.Begin(self.slm_grid_size, self.trap_machine.wave,
-                         self.slm_grid_dim)
+                              self.slm_grid_dim)
 
         self.field = lp.GaussBeam(self.field, self.gauss_waist)
+
+        self.sum_field = np.zeros((self.camera_grid_dim, self.camera_grid_dim))
 
     def to_slm(self, holo):
         self.holo = self.holo_box(holo)
@@ -310,7 +402,6 @@ class TrapSimulator(TrapVision):
         return self.propagate(self.holo)
 
     def propagate(self, holo):
-
         field = lp.SubPhase(self.field, holo)
         field = lp.Lens(field, self.trap_machine.focus)
         field = lp.Forvard(field, self.trap_machine.focus)
@@ -321,7 +412,7 @@ class TrapSimulator(TrapVision):
         return result
 
     def register(self):
-        #plt.ion()
+        # plt.ion()
         # bar = FillingCirclesBar('Регистрация Ловушек', max=self.trap_machine.num_traps)
         self.back = np.zeros((self.camera_grid_dim, self.camera_grid_dim))
         self.to_show = self.back
@@ -334,33 +425,19 @@ class TrapSimulator(TrapVision):
             shot = self.propagate(holo)
 
             x, y = self.find_trap(np.abs(shot))
-            self.registered_x.append(x)
-            self.registered_y.append(y)
+            self.registered_x.append(y)
+            self.registered_y.append(x)
+            self.sum_field = self.sum_field + shot
             # bar.next()
-            print('REG ', i + 1)
+            print('REG ', i + 1, 'X = ', x, 'Y = ', y)
 
-            #plt.clf()
+            # plt.clf()
 
-            #plt.imshow(shot, cmap='hot')
+            # plt.imshow(shot, cmap='hot')
 
-            #plt.draw()
-            #plt.gcf().canvas.flush_events()
+            # plt.draw()
+            # plt.gcf().canvas.flush_events()
         # bar.finish()
-
-    @staticmethod
-    def holo_box(holo):
-        rows, cols = holo.shape
-
-        size = max(rows, cols)
-
-        square_array = np.zeros((size, size), dtype=holo.dtype)
-
-        row_offset = (size - rows) // 2
-        col_offset = (size - cols) // 2
-
-        square_array[row_offset:row_offset + rows, col_offset:col_offset + cols] = holo
-
-        return square_array
 
 
 class Algorithm(ABC):
