@@ -30,7 +30,7 @@ class SLM:
         self.x, self.y = np.meshgrid(_x, _y)
 
         self.rho = np.sqrt(self.x ** 2 + self.y ** 2)
-        self.theta = np.atan2(self.y, self.x)
+        self.theta = np.arctan2(self.y, self.x)
 
     def translate(self, array: np.ndarray):
         image = self.to_pixels(array)
@@ -71,7 +71,7 @@ class Camera(Vision):
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.height)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.width)
         shots = []
-        for i in range(5):
+        for i in range(15):
             _, shot = cap.read()
             shots.append(shot)
 
@@ -156,7 +156,7 @@ class Experiment:
 
         show = cv2.circle(shot, (x, y), self.search_radius, (0, 255, 0), 1)
 
-        show = cv2.resize(show, (500, 500))
+        #show = cv2.resize(show, (500, 500))
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 

@@ -1,11 +1,11 @@
 import cv2
 import numpy as np
 
+
 from check_traps import uniformity, intensity
 from optics import *
 import pygad
 
-from optics import CoolCamera
 
 import copy
 
@@ -18,18 +18,31 @@ class TryAlgorithm(Algorithm):
 
         self.step = step
 
+    def write_file(self, solution, u, values, k):
+        soluttion = [str(solution[i]) for i in range(len(solution))]
+        values = [str(values[i]) for i in range(len(values))]
+        u = str(u)
+        with open(rf'3x3_x=1000_dx=120\{k}.txt', 'w') as f:
+            f.write(' '.join(soluttion)+'\n')
+            f.write(' '.join(values) + '\n')
+            f.write(u)
+
+
+
     def run(self):
-        solution = np.ones(self.trap_machine.num_traps)
-        solution = np.asarray(solution)
         plt.ion()
         for k in range(int(self.iterations)):
+            solution = np.random.uniform(-10, 10, self.trap_machine.num_traps)
             intensities, u, shot = self.check(solution + 1)
+            intensities = np.asarray(intensities, dtype='float64')
+
+            self.write_file(solution, u, intensities, k)
 
             plt.clf()
 
+            plt.draw()
             plt.imshow(shot, cmap='hot')
 
-            plt.draw()
             plt.gcf().canvas.flush_events()
 
             print(f'Generation    = {k}')
@@ -39,9 +52,6 @@ class TryAlgorithm(Algorithm):
             print(f'Uniformity    = {u}')
             print()
 
-            coeff = 1 / np.min([self.step, k/2 + 1])
-            steps = (np.average(intensities) - intensities)
-            solution = solution - steps / (np.max(steps) + 1) * coeff
             # for i in range(self.trap_machine.num_traps):
         # if intensities[i] == np.min(intensities):
         # solution[i] += coeff * steps[i] / np.max(steps)
@@ -49,13 +59,14 @@ class TryAlgorithm(Algorithm):
         return solution
 
     def check(self, values):
-        holo = self.trap_machine.numba_holo_traps(values)
+        holo = self.trap_machine.phase_holo_traps(values)
         # self.slm.translate(holo)
         self.trap_vision.to_slm(holo)
 
         shot = self.trap_vision.take_shot()
 
         intensities = self.trap_vision.check_intensities(shot)
+        intensities = np.asarray(intensities, dtype='float64')
 
         return intensities, self.uniformity(intensities), shot
 
@@ -63,21 +74,21 @@ class TryAlgorithm(Algorithm):
 if __name__ == '__main__':
     _slm = SLM()
     _camera = Camera()
-    _tr = TrapMachine((1000*UM, 0), (120 * UM, 120 * UM), (5, 5), _slm)
+    _tr = TrapMachine((1000 * UM, 0), (120 * UM, 120 * UM), (3, 3), _slm)
 
     sim = TrapVision(_camera, _tr, _slm, search_radius=15)
     sim.register()
     # sim.show_registered()
 
-    alg = TryAlgorithm(_slm, _camera, _tr, sim, 1000, 150)
+    alg = TryAlgorithm(_slm, _camera, _tr, sim, 10000, 200)
 
     sol = alg.run()
     print(sol)
     #result = sim.propagate(sim.holo_box(_tr.numba_holo_traps(sol)))
 
-    #im = plt.imshow(result, cmap='nipy_spectral')
+   # im = plt.imshow(result, cmap='nipy_spectral')
     #plt.colorbar(im)
-    plt.show()
+    #plt.show()
 
     # i = sim.propagate(sim.holo_box(ph))
     # plt.ioff()

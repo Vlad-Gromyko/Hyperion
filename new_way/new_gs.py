@@ -1,5 +1,6 @@
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from lab import *
@@ -51,13 +52,17 @@ class GSplusWeight(Experiment):
         print('After GS  [Phases]       ::  ', solution)
 
         print('Start BackLoop...')
-
+        u_history = []
+        best = 0
         weights = np.ones(self.num_traps)
+        best_sol = []
         for k in range(iterations):
 
             avg = np.average(values)
 
-            weights = weights * np.exp(avg - values)
+            thresh = min(40, k//2 + 1)
+            p = 1/2
+            weights = weights * np.exp((avg - values) / thresh)
 
             holo = self.holo_weights_and_phases(weights, solution)
 
@@ -67,6 +72,9 @@ class GSplusWeight(Experiment):
 
             values = self.check_intensities(shot)
             u = self.uniformity(values)
+            u_history.append(u)
+            if np.max(u_history) > best:
+                best_sol = weights
 
             print('Iteration                ::  ', k)
             print('BackLoop  [Intensities]  ::  ', values)
@@ -74,18 +82,24 @@ class GSplusWeight(Experiment):
             print('BackLoop  [Uniformity]   ::  ', u)
             print()
 
+            plt.plot([i for i in range(len(u_history))], u_history)
+            plt.title(f'{k}')
+            plt.draw()
+            plt.gcf().canvas.flush_events()
 
+        print('BackLoop  [Best]             ::  ', best_sol)
 
 
 if __name__ == '__main__':
+    plt.ion()
     exp = GSplusWeight()
 
-    exp.add_array(0, 0, 120 * UM, 120 * UM, 3, 3)
-    #exp.add_circle_array(0,0, 120 * UM, 10)
-    #exp.show_trap_map()
+    exp.add_array(1500 * UM, 0, 60 * UM, 60 * UM, 10, 10)
+    # exp.add_circle_array(1500*UM,0, 120 * UM, 10)
+    # exp.show_trap_map()
 
     exp.register_traps()
 
-
-    exp.run(10)
-
+    exp.run(300)
+    plt.ioff()
+    plt.show()

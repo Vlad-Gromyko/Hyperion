@@ -68,22 +68,22 @@ class GeneticAlgorithm(Algorithm):
 
 if __name__ == '__main__':
     _slm = SLM()
-    _camera = CoolCamera()
-    _tr = TrapMachine((0, 0), (120 * UM, 120 * UM), (2, 2), _slm)
+    _camera = Camera()
+    _tr = TrapMachine((1000 * UM, 0), (120 * UM, 120 * UM), (2, 2), _slm)
 
-    sim = TrapSimulator(_camera, _tr, _slm, search_radius=15)
+    sim = TrapVision(_camera, _tr, _slm, search_radius=15)
     sim.register()
-    sim.show_registered()
+    #sim.show_registered()
 
 
     alg = GeneticAlgorithm(_slm, _camera, _tr, sim, 40)
 
     sol = alg.run()
-    print(sol)
-    result = sim.propagate(sim.holo_box(_tr.numba_holo_traps(sol)))
+    #print(sol)
+    #result = sim.propagate(sim.holo_box(_tr.numba_holo_traps(sol)))
 
-    im = plt.imshow(result, cmap='nipy_spectral')
-    plt.colorbar(im)
+   # im = plt.imshow(result, cmap='nipy_spectral')
+   # plt.colorbar(im)
     plt.show()
 
     # i = sim.propagate(sim.holo_box(ph))

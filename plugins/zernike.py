@@ -117,7 +117,7 @@ def zernike(n, m, res_x, res_y):
 
     r = np.sqrt(_x ** 2 + _y ** 2)
 
-    phi = np.atan2(_y, _x)
+    phi = np.arctan2(_y, _x)
 
     array = np.zeros((res_y, res_x))
     for k in range(0, int((n - abs(m)) / 2) + 1):

@@ -11,7 +11,6 @@ from typing import Union, List, Tuple, Iterable
 from abc import ABC, abstractmethod
 
 import time
-from progress.bar import FillingCirclesBar, Bar
 
 import LightPipes as lp
 
@@ -35,7 +34,7 @@ class Mesh:
         self.x, self.y = np.meshgrid(_x, _y)
 
         self.rho = np.sqrt(self.x ** 2 + self.y ** 2)
-        self.theta = np.atan2(self.y, self.x)
+        #self.theta = np.atan2(self.y, self.x)
 
 
 class SLM:
@@ -116,7 +115,6 @@ class TrapMachine:
         holo = np.angle(holo)
         return holo + np.pi
 
-
     def holo_traps(self, weights=None):
         if weights is None:
             weights = [1 for i in range(self.num_traps)]
@@ -134,8 +132,9 @@ class TrapMachine:
 
     def numba_true(self, weights):
         return (mega_HOTA(self.x_traps, self.y_traps, self.slm.mesh.x, self.slm.mesh.y,
-                         self.wave, self.focus, weights, np.zeros((self.slm.mesh.height, self.slm.mesh.width)), 10)
+                          self.wave, self.focus, weights, np.zeros((self.slm.mesh.height, self.slm.mesh.width)), 10)
                 + np.pi)
+
 
 @numba.njit(fastmath=True, parallel=True)
 def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
@@ -171,8 +170,6 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
             trap = (lattice * (x_list[iv] * x_mesh + y_list[iv] * y_mesh)) % (2 * np.pi)
             v_list[iv] = 1 / area * np.sum(np.exp(1j * (phase - trap)))
     return phase
-
-
 
 
 @numba.njit(fastmath=True)
@@ -237,7 +234,7 @@ class CoolCamera(Camera):
 
 
 class TrapVision:
-    def __init__(self, camera: Camera, trap_machine: TrapMachine, slm: SLM, search_radius=5, gauss_waist=1*MM):
+    def __init__(self, camera: Camera, trap_machine: TrapMachine, slm: SLM, search_radius=5, gauss_waist=1 * MM):
         self.camera = camera
         self.trap_machine = trap_machine
         self.slm = slm
@@ -246,7 +243,7 @@ class TrapVision:
         self.registered_y = []
 
         self.search_radius = search_radius
-        self.gauss_waist=gauss_waist
+        self.gauss_waist = gauss_waist
 
         self.back = None
         self.to_show = None
@@ -267,7 +264,6 @@ class TrapVision:
 
         return square_array
 
-
     def register(self):
 
         # plt.ion()
@@ -286,11 +282,12 @@ class TrapVision:
             self.slm.translate(holo)
             shot = self.camera.take_shot()
 
-            x, y = self.find_trap(np.abs(self.back - shot))
+            y, x = self.find_trap(np.abs(self.back - shot))
             self.registered_x.append(x)
             self.registered_y.append(y)
 
-            self.sum_field = self.sum_field + shot
+            #self.sum_field = self.sum_field + shot
+
             print('REG ', i + 1, 'X = ', x, 'Y = ', y)
             # bar.next()
 
@@ -321,7 +318,7 @@ class TrapVision:
             self.draw_circle(self.registered_y[i], self.registered_x[i], shot)
             values.append(value)
 
-        return np.asarray(values) / np.max(values)
+        return np.asarray(values)
 
     def draw_circle(self, x, y, shot):
         shot = shot / np.max(shot) * 255
@@ -378,7 +375,6 @@ class TrapVision:
 class TrapSimulator(TrapVision):
     def __init__(self, camera: Camera, trap_machine: TrapMachine, slm: SLM, search_radius=5, gauss_waist=1 * MM):
         super().__init__(camera, trap_machine, slm, search_radius, gauss_waist)
-
 
         self.slm_grid_dim = max(self.slm.mesh.width, self.slm.mesh.height)
         self.slm_grid_size = self.slm_grid_dim * self.slm.mesh.pitch_x

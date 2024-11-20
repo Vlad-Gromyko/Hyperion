@@ -155,7 +155,7 @@ class Plugin(AbstractPlugin):
         b, g, r = cv2.split(show)
 
         if self.radio_var.get() == 0:
-            self.center_x, self.center_y = center_place(np.abs(self.background - shifted))
+            self.center_y, self.center_x = center_place(np.abs(self.background - shifted))
         else:
             x_l, y_l, x_r, y_r = self.event_bus.raise_request(Event('TAKE_ROI'))
             self.center_x = (x_l + x_r) / 2
