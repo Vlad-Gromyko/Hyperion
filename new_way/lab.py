@@ -8,7 +8,6 @@ import cv2
 
 import matplotlib.pyplot as plt
 
-
 SM = 10 ** -2
 MM = 10 ** -3
 UM = 10 ** -6
@@ -104,6 +103,9 @@ class Experiment:
 
         self.search_radius = search_radius
 
+        self.correction_angle = 0
+        self.counter = 0
+
     def show_trap_map(self):
         plt.style.use('dark_background')
 
@@ -134,29 +136,30 @@ class Experiment:
                 self.add_trap(ix, iy)
 
     def add_circle_array(self, c_x, c_y, radius, num):
-        angle = 2*np.pi / num
+        angle = 2 * np.pi / num
 
         for k in range(num):
             self.add_trap(radius * np.cos(angle) + c_x, radius * np.sin(angle) + c_y)
-            angle += 2*np.pi / num
+            angle += 2 * np.pi / num
 
     def check_intensities(self, shot):
         values = []
         for i in range(self.num_traps):
             value = self.intensity(self.registered_x[i], self.registered_y[i], shot)
-            self.draw_circle(self.registered_y[i], self.registered_x[i], shot)
+            self.draw_area(self.registered_y[i], self.registered_x[i], shot)
             values.append(value)
 
         return np.asarray(values) / np.max(values)
 
-    def draw_circle(self, x, y, shot):
+    def draw_area(self, x, y, shot):
         shot = shot / np.max(shot) * 255
         shot = np.asarray(shot, dtype='uint8')
         shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
 
-        show = cv2.circle(shot, (x, y), self.search_radius, (0, 255, 0), 1)
+        show = cv2.rectangle(shot, (x - self.search_radius, y - self.search_radius),
+                             (x + self.search_radius, y + self.search_radius), (0, 255, 0), 1)
 
-        #show = cv2.resize(show, (500, 500))
+        # show = cv2.resize(show, (500, 500))
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 
@@ -195,7 +198,9 @@ class Experiment:
         return np.max(shot * mask)
 
     def register_traps(self):
+        holo = self.holo_trap(0, 2000*UM)
 
+        self.slm.translate(holo)
         self.back = self.vision.take_shot()
 
         for i in range(self.num_traps):
@@ -232,6 +237,34 @@ class Experiment:
         phases = np.asarray(phases)
         return numba_w_p_kernel(weights, phases, self.x_traps, self.y_traps, self.wave, self.focus, self.slm.width,
                                 self.slm.height, self.slm.x, self.slm.y)
+
+    def angle_correct(self, delta_x, c_x=0 * UM):
+        holo = self.holo_trap(c_x - delta_x / 2, 0)
+
+        self.slm.translate(holo)
+        shot = self.vision.take_shot()
+
+        y_left, x_left = self.find_trap(np.abs(self.back - shot))
+
+        holo = self.holo_trap(c_x + delta_x / 2, 0)
+
+        self.slm.translate(holo)
+        shot = self.vision.take_shot()
+
+        y_right, x_right = self.find_trap(np.abs(self.back - shot))
+
+        self.correction_angle = np.arctan2(y_left - y_right, x_left - x_left)
+        return self.correction_angle
+
+    def apply_angle_correction(self):
+        for i in range(len(self.x_traps)):
+            self.x_traps[i], self.y_traps[i] = self.angle(self.x_traps[i], self.y_traps[i], -self.correction_angle)
+
+    @staticmethod
+    def angle(x, y, theta):
+        x_ = x * np.cos(theta) - y * np.sin(theta)
+        y_ = x * np.sin(theta) + y * np.cos(theta)
+        return x_, y_
 
     @staticmethod
     def uniformity(values):

@@ -1,4 +1,4 @@
-from numba.cuda.cudadrv.devicearray import lru_cache
+from functools import lru_cache
 
 from core.services.abstract_plugin import AbstractPlugin
 from core.event_bus import Event
