@@ -6,7 +6,6 @@ import numpy as np
 from lab import *
 
 import numba
-from math import factorial
 
 
 @numba.njit(fastmath=True, parallel=True)
@@ -61,9 +60,14 @@ class GSplusWeight(Experiment):
 
             avg = np.average(values)
 
-            thresh = min(40, k // 2 + 1)
-            p = 1 / 2
-            weights = weights * np.exp((avg - values) / thresh)
+            thresh = min(4000, k / 10 + 1)
+            if k <= 30:
+                p = 70
+            else:
+                p = 50
+            # weights = weights * (((avg - values) / thresh * (1 - u)) ** 3 + 1)
+            weights = np.where(values == np.max(values), weights * np.exp((avg - values) / thresh * p * (1 - u)),
+                               weights * np.exp((avg - values) / thresh * (1 - u)))
 
             holo = self.holo_weights_and_phases(weights, solution)
 
@@ -95,17 +99,18 @@ if __name__ == '__main__':
     plt.ion()
     exp = GSplusWeight()
 
-    exp.add_array(1500 * UM, 0, 60 * UM, 60 * UM, 10, 1)
-    # exp.add_circle_array(1500*UM,0, 120 * UM, 10)
+    exp.add_array(1300 * UM, 0, 160 * UM, 160 * UM, 5, 5)
+    # exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
+    # exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
 
-    print('Угол наклона координатной сетки  ::  ', exp.angle_correct(500 * UM, 1500 * UM))
+    # print('Угол наклона координатной сетки  ::  ', exp.angle_correct(500 * UM, 800 * UM))
 
-    exp.apply_angle_correction()
+    # exp.apply_angle_correction()
 
     # exp.show_trap_map()
 
     exp.register_traps()
 
-    # exp.run(300)
+    exp.run(300)
     plt.ioff()
     plt.show()

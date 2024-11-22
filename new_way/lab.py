@@ -83,7 +83,7 @@ class Camera(Vision):
 
 
 class Experiment:
-    def __init__(self, slm: SLM = SLM(), vision: Camera = Camera(), wave=850 * NM, focus=100 * MM, search_radius=10):
+    def __init__(self, slm: SLM = SLM(), vision: Camera = Camera(), wave=850 * NM, focus=100 * MM, search_radius=20):
         self.slm = slm
 
         self.wave = wave
@@ -105,6 +105,10 @@ class Experiment:
 
         self.correction_angle = 0
         self.counter = 0
+
+        self.register_traps()
+        self.x_traps = []
+        self.y_traps = []
 
     def show_trap_map(self):
         plt.style.use('dark_background')
@@ -198,9 +202,7 @@ class Experiment:
         return np.max(shot * mask)
 
     def register_traps(self):
-        holo = self.holo_trap(0, 2000*UM)
 
-        self.slm.translate(holo)
         self.back = self.vision.take_shot()
 
         for i in range(self.num_traps):
