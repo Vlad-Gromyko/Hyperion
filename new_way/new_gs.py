@@ -1,5 +1,6 @@
 import time
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -26,8 +27,24 @@ def gs(x_traps, y_traps, wave, focus, x_mesh, y_mesh, starter, solution, iterati
 
 
 class GSplusWeight(Experiment):
+    def __init__(self, slm: SLM = SLM(), vision: Camera| VirtualCamera = Camera(), wave=850 * NM, focus=100 * MM, search_radius=20):
+        super().__init__(slm, vision, wave, focus, search_radius)
+        self.u_history = []
+        self.weights_history = []
+
+        self.best_solution = []
+        self.best_uniformity = []
+        self.best_intensities = []
+
+        self.fig, axs = plt.subplots(4, 1, layout='constrained')
+        axs[0].set_ylabel('Uniformity')
+        axs[1].set_ylabel('Intensities')
+        axs[2].set_ylabel('Weights')
+        axs[3].set_ylabel('P')
+
+
     def run(self, iterations):
-        np.random.seed(42)
+        np.random.seed(2)
         starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
 
         first_sol = np.random.uniform(0, 2 * np.pi, self.num_traps)
@@ -41,9 +58,9 @@ class GSplusWeight(Experiment):
 
         phase = phase + np.pi
 
-        self.slm.translate(phase)
+        self.to_slm(phase)
 
-        shot = self.vision.take_shot()
+        shot = self.take_shot()
         values = self.check_intensities(shot)
         u = self.uniformity(values)
 
@@ -53,27 +70,45 @@ class GSplusWeight(Experiment):
 
         print('Start BackLoop...')
         u_history = []
+        u_history.append(u)
         best = 0
         weights = np.ones(self.num_traps)
         best_sol = []
+        p = np.ones_like(weights)
+        fig, axs = plt.subplots(4, 1, layout='constrained')
+        axs[0].set_ylabel('Uniformity')
+        axs[1].set_ylabel('Intensities')
+        axs[2].set_ylabel('Weights')
+        axs[3].set_ylabel('P')
+
+        plt.draw()
+
+        plt.gcf().canvas.flush_events()
+
         for k in range(iterations):
 
             avg = np.average(values)
 
-            thresh = min(4000, k / 10 + 1)
-            if k <= 30:
-                p = 70
-            else:
-                p = 50
-            # weights = weights * (((avg - values) / thresh * (1 - u)) ** 3 + 1)
-            weights = np.where(values == np.max(values), weights * np.exp((avg - values) / thresh * p * (1 - u)),
-                               weights * np.exp((avg - values) / thresh * (1 - u)))
+            thresh = 100/min(50, k + 1)
+            # p=4
+            # weights = weights * np.exp(((avg - values) / thresh*p))
+            #weights = np.where(values == np.max(values), weights * np.exp(np.sign((avg - values)) / thresh * p * (1 - u)),
+            #weights * np.exp((avg - values) / thresh * (1 - u)))
+
+            # weights = weights * np.exp((avg - values) / thresh)
+
+            gradient = u_history[-1] - u_history[-2]
+            p = np.where(values == np.max(values), p + 1, 1)
+
+            # weights = 2 * weights / (1 + np.exp(-(avg - values)))
+
+            # weights = weights + ((avg - values)/ np.linalg.norm(avg - values))*thresh
 
             holo = self.holo_weights_and_phases(weights, solution)
 
-            self.slm.translate(holo)
+            self.to_slm(holo)
 
-            shot = self.vision.take_shot()
+            shot = self.take_shot()
 
             values = self.check_intensities(shot)
             u = self.uniformity(values)
@@ -87,9 +122,29 @@ class GSplusWeight(Experiment):
             print('BackLoop  [Uniformity]   ::  ', u)
             print()
 
-            plt.plot([i for i in range(len(u_history))], u_history)
-            plt.title(f'{k}')
+            # plt.plot([i for i in range(len(u_history))], u_history)
+            # plt.title(f'{k}')
+            axs[0].clear()
+            axs[0].plot([i for i in range(len(u_history))], u_history)
+
+            axs[1].clear()
+            axs[1].bar([i for i in range(len(values))], values)
+
+            axs[2].clear()
+            axs[2].bar([i for i in range(self.num_traps)], weights)
+
+            axs[3].clear()
+            axs[3].bar([i for i in range(self.num_traps)], p)
+
+            axs[0].set_ylabel('Uniformity')
+            axs[1].set_ylabel('Intensities')
+            axs[2].set_ylabel('Weights')
+            axs[3].set_ylabel('P')
+
+            plt.title(f'{k},   u = {u}')
+
             plt.draw()
+
             plt.gcf().canvas.flush_events()
 
         print('BackLoop  [Best]             ::  ', best_sol)
@@ -97,9 +152,9 @@ class GSplusWeight(Experiment):
 
 if __name__ == '__main__':
     plt.ion()
-    exp = GSplusWeight()
+    exp = GSplusWeight(vision=VirtualCamera())
 
-    exp.add_array(1300 * UM, 0, 160 * UM, 160 * UM, 5, 5)
+    exp.add_array(0 * UM, 0, 160 * UM, 160 * UM, 5, 5)
     # exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
     # exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
 

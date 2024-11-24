@@ -7,6 +7,7 @@ import screeninfo
 import cv2
 
 import matplotlib.pyplot as plt
+import LightPipes as lp
 
 SM = 10 ** -2
 MM = 10 ** -3
@@ -55,10 +56,6 @@ class Vision(ABC):
 
         self.pixel = pixel
 
-        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.height)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.width)
-
     @abstractmethod
     def take_shot(self):
         pass
@@ -82,8 +79,49 @@ class Camera(Vision):
         return shot
 
 
+class VirtualCamera(Vision):
+    def __init__(self, width: int = 1280, height: int = 720, pixel: float = 3 * UM, slm: SLM = SLM(),
+                 gauss_waist: float = 1 * MM,
+                 wave: float = 850 * NM,
+                 focus = 100 * MM):
+        super().__init__(width, height, pixel)
+        self.slm = slm
+        self.gauss_waist = gauss_waist
+
+        self.wave = wave
+        self.focus = focus
+
+        self.slm_grid_dim = max(self.slm.width, self.slm.height)
+        self.slm_grid_size = self.slm_grid_dim * self.slm.pixel_x
+
+        self.camera_grid_dim = max(self.width, self.height)
+        self.camera_grid_size = self.camera_grid_dim * self.pixel / 3
+
+        self.holo = None
+
+        self.field = lp.Begin(self.slm_grid_size, self.wave,
+                              self.slm_grid_dim)
+
+        self.field = lp.GaussBeam(self.field, self.gauss_waist)
+
+        self.sum_field = np.zeros((self.camera_grid_dim, self.camera_grid_dim))
+
+    def take_shot(self):
+        pass
+
+    def propagate(self, holo):
+        field = lp.SubPhase(self.field, holo)
+        field = lp.Lens(field, self.focus)
+        field = lp.Forvard(field, self.focus)
+
+        field = lp.Interpol(field, self.camera_grid_size,
+                            self.camera_grid_dim)
+        result = lp.Intensity(field)
+        return result
+
+
 class Experiment:
-    def __init__(self, slm: SLM = SLM(), vision: Camera = Camera(), wave=850 * NM, focus=100 * MM, search_radius=20):
+    def __init__(self, slm: SLM = SLM(), vision: Camera| VirtualCamera = Camera(), wave=850 * NM, focus=100 * MM, search_radius=20):
         self.slm = slm
 
         self.wave = wave
@@ -99,16 +137,27 @@ class Experiment:
 
         self.num_traps = 0
 
-        self.back = np.zeros((slm.height, slm.width))
+        self.back = np.zeros((vision.height, vision.width))
 
         self.search_radius = search_radius
 
         self.correction_angle = 0
         self.counter = 0
 
-        self.register_traps()
-        self.x_traps = []
-        self.y_traps = []
+        self.on_slm = np.zeros((slm.height, slm.width))
+
+
+
+    def to_slm(self, array):
+        if isinstance(self.vision, Camera):
+            self.slm.translate(array)
+        self.on_slm = array
+
+
+    def take_shot(self):
+        if isinstance(self.vision, Camera):
+            return self.vision.take_shot()
+        return self.vision.propagate(self.holo_box(self.on_slm))
 
     def show_trap_map(self):
         plt.style.use('dark_background')
@@ -150,20 +199,23 @@ class Experiment:
         values = []
         for i in range(self.num_traps):
             value = self.intensity(self.registered_x[i], self.registered_y[i], shot)
-            self.draw_area(self.registered_y[i], self.registered_x[i], shot)
+            self.draw_area(i, self.registered_y, self.registered_x, shot)
             values.append(value)
 
         return np.asarray(values) / np.max(values)
 
-    def draw_area(self, x, y, shot):
+    def draw_area(self, i, x_list, y_list, shot):
         shot = shot / np.max(shot) * 255
         shot = np.asarray(shot, dtype='uint8')
         shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
+        for k in range(len(x_list)):
+            shot = cv2.rectangle(shot, (x_list[k] - self.search_radius, y_list[k] - self.search_radius),
+                                 (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (255, 0, 0), 1)
 
-        show = cv2.rectangle(shot, (x - self.search_radius, y - self.search_radius),
-                             (x + self.search_radius, y + self.search_radius), (0, 255, 0), 1)
+        show = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
+                             (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 1)
 
-        # show = cv2.resize(show, (500, 500))
+        show = cv2.resize(show, (500, 500))
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 
@@ -202,16 +254,15 @@ class Experiment:
         return np.max(shot * mask)
 
     def register_traps(self):
-
-        self.back = self.vision.take_shot()
+        self.to_slm(self.holo_trap(0, 2000*UM))
+        self.back = self.take_shot()
 
         for i in range(self.num_traps):
             x_trap = self.x_traps[i]
             y_trap = self.y_traps[i]
             holo = self.holo_trap(x_trap, y_trap)
-
-            self.slm.translate(holo)
-            shot = self.vision.take_shot()
+            self.to_slm(holo)
+            shot = self.take_shot()
 
             y, x = self.find_trap(np.abs(self.back - shot))
             self.registered_x.append(x)
@@ -234,6 +285,21 @@ class Experiment:
     def run(self, iterations):
         pass
 
+    @staticmethod
+    def holo_box(holo):
+        rows, cols = holo.shape
+
+        size = max(rows, cols)
+
+        square_array = np.zeros((size, size), dtype=holo.dtype)
+
+        row_offset = (size - rows) // 2
+        col_offset = (size - cols) // 2
+
+        square_array[row_offset:row_offset + rows, col_offset:col_offset + cols] = holo
+
+        return square_array
+
     def holo_weights_and_phases(self, weights, phases):
         weights = np.asarray(weights)
         phases = np.asarray(phases)
@@ -243,15 +309,15 @@ class Experiment:
     def angle_correct(self, delta_x, c_x=0 * UM):
         holo = self.holo_trap(c_x - delta_x / 2, 0)
 
-        self.slm.translate(holo)
-        shot = self.vision.take_shot()
+        self.to_slm(holo)
+        shot = self.take_shot()
 
         y_left, x_left = self.find_trap(np.abs(self.back - shot))
 
         holo = self.holo_trap(c_x + delta_x / 2, 0)
 
-        self.slm.translate(holo)
-        shot = self.vision.take_shot()
+        self.to_slm(holo)
+        shot = self.take_shot()
 
         y_right, x_right = self.find_trap(np.abs(self.back - shot))
 
