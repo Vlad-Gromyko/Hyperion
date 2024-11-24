@@ -93,14 +93,19 @@ class GSplusWeight(Experiment):
         weights = np.random.uniform(size=self.num_traps)
         self.iteration(weights)
 
-        velocity = 2
-        momentum = 0.1
+        velocity = 1
+
 
 
         for k in range(iterations):
-            gradient = self.gradient(weights)
+            values = self.intensities_history[-1]
+            avg = np.average(values)
+            u = self.u_history[-1]
 
-            weights = weights + velocity/ (k+1)  * gradient + momentum * self.weights_history[-1]
+            thresh = min(k + 1, 20)
+            gradient = np.exp((avg - values) * velocity/thresh * (1+u))
+
+            weights = weights * gradient ** np.sign(avg - values)
             self.iteration(weights)
 
 
@@ -158,7 +163,7 @@ if __name__ == '__main__':
     plt.ion()
     exp = GSplusWeight(vision=VirtualCamera())
 
-    exp.add_array(0 * UM, 0, 160 * UM, 160 * UM, 4, 4)
+    exp.add_array(0 * UM, 0, 160 * UM, 160 * UM, 2, 2)
     # exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
     # exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
 
