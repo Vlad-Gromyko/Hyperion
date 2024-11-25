@@ -100,7 +100,7 @@ class GSplusWeight(Experiment):
             thresh = min(k + 1, 100)
 
 
-            weights = weights + velocity * (np.max(values) - values) / thresh
+            weights = weights + velocity * np.exp(np.max(values) - values) / thresh
             self.iteration(weights)
 
 
