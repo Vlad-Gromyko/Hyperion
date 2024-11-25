@@ -97,10 +97,11 @@ class GSplusWeight(Experiment):
             avg = np.average(values)
             u = self.u_history[-1]
 
-            thresh = min(k + 1, 100)
+            thresh = min(k + 0.1, 100)
 
 
-            weights = weights + velocity * np.exp(np.max(values) - values) / thresh
+            weights = weights + velocity * np.exp((np.max(values) - values)) * (1 + k/10)
+
             self.iteration(weights)
 
 
