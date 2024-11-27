@@ -66,16 +66,23 @@ class Camera(Vision):
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.height)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.width)
+        cap.set(cv2.CAP_PROP_EXPOSURE, -8)
         shots = []
         for i in range(15):
             _, shot = cap.read()
+
+            shot = np.asarray(shot, dtype='uint8')
+
+
+            shot = cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
             shots.append(shot)
 
         shot = np.average(shots, axis=0)
-        shot = np.asarray(shot, dtype='uint8')
-        shot = cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
-        shot = np.asarray(shot, dtype='int16')
+
+
+        #shot = np.asarray(shot, dtype='int16')
         cap.release()
+
         return shot
 
 
@@ -205,17 +212,19 @@ class Experiment:
         return np.asarray(values) / np.max(values)
 
     def draw_area(self, i, x_list, y_list, shot):
+
+        h, w = np.shape(shot)
         shot = shot / np.max(shot) * 255
         shot = np.asarray(shot, dtype='uint8')
         shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
         for k in range(len(x_list)):
             shot = cv2.rectangle(shot, (x_list[k] - self.search_radius, y_list[k] - self.search_radius),
-                                 (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (255, 0, 0), 1)
+                                 (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (0, 0, 255), 1)
 
         show = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
                              (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 1)
 
-        show = cv2.resize(show, (500, 500))
+        #show = cv2.resize(show, (h//3, w//3))
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 
@@ -228,11 +237,13 @@ class Experiment:
         ax, ay = np.meshgrid(ax, ay)
 
         x_c = int(np.sum(ax * image) / np.sum(image))
+
         y_c = int(np.sum(ay * image) / np.sum(image))
         return x_c, y_c
 
     def find_trap(self, array):
         spot = np.max(array)
+
         mask = np.where(array == spot, array, 0)
         x, y = self.find_center(mask)
         return x, y

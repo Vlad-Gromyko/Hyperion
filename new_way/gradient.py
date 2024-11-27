@@ -46,7 +46,11 @@ class GSplusWeight(Experiment):
         self.fig, self.axs = plt.subplots(3, 1, layout='constrained')
 
     def iteration(self, weights):
-        holo = self.holo_weights_and_phases(weights, self.solution)
+
+        starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
+        hota = lambda solution: mega_HOTA(self.x_traps, self.y_traps, self.slm.x, self.slm.y, self.wave,
+                                          self.focus, solution, starter, 20)
+        holo = hota(weights)
         self.to_slm(holo)
 
         shot = self.take_shot()
@@ -79,30 +83,23 @@ class GSplusWeight(Experiment):
 
     def run(self, iterations):
         np.random.seed(2)
+
+
         starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
-
-        first_sol = np.random.uniform(0, 2 * np.pi, self.num_traps)
-
-        st_time = time.time()
-        phase, self.solution = gs(self.x_traps, self.y_traps,
-                                  self.wave, self.focus, self.slm.x, self.slm.y, starter, first_sol, 30)
-        print('GS Compute-Time          ::  ', time.time() - st_time)
-        print()
-        print()
+        hota = lambda solution: mega_HOTA(self.x_traps, self.y_traps, self.slm.x, self.slm.y, self.wave,
+                                          self.focus, solution, starter, 20)
 
         weights = np.random.uniform(size=self.num_traps)
         self.iteration(weights)
 
         velocity = 2
-        momentum = 0.1
-
+        momentum = 0
 
         for k in range(iterations):
             gradient = self.gradient(weights)
 
-            weights = weights + velocity/ (k+1)  * gradient + momentum * self.weights_history[-1]
+            weights = weights + velocity / (k + 1) * gradient + momentum * self.weights_history[-1]
             self.iteration(weights)
-
 
     @staticmethod
     def calculate_k(x, y):
@@ -137,7 +134,10 @@ class GSplusWeight(Experiment):
     def gradient_kernel(self, weights, k, epsilon=0.1):
         l_weights = copy.deepcopy(weights)
         l_weights[k] = weights[k] - epsilon / 2
-        holo = self.holo_weights_and_phases(l_weights, self.solution)
+        starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
+        hota = lambda solution: mega_HOTA(self.x_traps, self.y_traps, self.slm.x, self.slm.y, self.wave,
+                                          self.focus, solution, starter, 20)
+        holo = hota(l_weights)
         self.to_slm(holo)
 
         shot = self.take_shot()
@@ -145,7 +145,7 @@ class GSplusWeight(Experiment):
         u1 = self.uniformity(values)
         r_weights = copy.deepcopy(weights)
         r_weights[k] = weights[k] + epsilon / 2
-        holo = self.holo_weights_and_phases(r_weights, self.solution)
+        holo = hota(r_weights)
         self.to_slm(holo)
 
         shot = self.take_shot()
@@ -154,11 +154,46 @@ class GSplusWeight(Experiment):
         return (u2 - u1) / epsilon
 
 
+@numba.njit(fastmath=True, parallel=True)
+def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
+    num_traps = len(user_weights)
+    v_list = np.zeros_like(user_weights, dtype=np.complex128)
+    area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
+    phase = np.zeros_like(initial_phase)
+
+    w_list = np.ones(num_traps)
+
+    lattice = 2 * np.pi / wave / focus
+
+    for i in range(num_traps):
+        trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
+        v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
+
+    anti_user_weights = 1 / user_weights
+
+    for k in range(iterations):
+        w_list_before = w_list
+        avg = np.average(np.abs(v_list), weights=anti_user_weights)
+
+        w_list = avg / np.abs(v_list) * user_weights * w_list_before
+
+        summ = np.zeros_like(initial_phase, dtype=np.complex128)
+        for ip in range(num_traps):
+            trap = (lattice * (x_list[ip] * x_mesh + y_list[ip] * y_mesh)) % (2 * np.pi)
+            summ = summ + np.exp(1j * trap) * user_weights[ip] * v_list[ip] * w_list[ip] / np.abs(
+                v_list[ip])
+        phase = np.angle(summ)
+
+        for iv in range(num_traps):
+            trap = (lattice * (x_list[iv] * x_mesh + y_list[iv] * y_mesh)) % (2 * np.pi)
+            v_list[iv] = 1 / area * np.sum(np.exp(1j * (phase - trap)))
+    return phase
+
 if __name__ == '__main__':
     plt.ion()
-    exp = GSplusWeight(vision=VirtualCamera())
+    exp = GSplusWeight()
 
-    exp.add_array(0 * UM, 0, 160 * UM, 160 * UM, 4, 4)
+    exp.add_array(1000 * UM, 0, 160 * UM, 160 * UM, 2, 2)
     # exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
     # exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
 

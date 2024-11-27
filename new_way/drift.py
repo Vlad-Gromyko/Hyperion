@@ -84,10 +84,10 @@ class GSplusWeight(Experiment):
     def run(self, iterations):
         np.random.seed(2)
 
-        weights = np.random.uniform(1,1.2, self.num_traps)
+        weights = np.ones(self.num_traps)
         self.iteration(weights)
 
-        velocity = 0.5
+        velocity = 1
 
         for k in range(iterations):
             values = self.intensities_history[-1]
@@ -96,7 +96,7 @@ class GSplusWeight(Experiment):
 
             thresh = min(k + 1, 100)
 
-            weights = weights + velocity * (1 - values) / thresh
+            #weights = weights + velocity * (1 - values) / thresh
             self.iteration(weights)
 
     @staticmethod
@@ -146,7 +146,7 @@ if __name__ == '__main__':
     plt.ion()
     exp = GSplusWeight()
 
-    exp.add_array(1000* UM, 0, 160 * UM, 160 * UM, 6, 6)
+    exp.add_array(1000* UM, 0, 160 * UM, 160 * UM, 2, 2)
     # exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
     # exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
 
