@@ -9,6 +9,9 @@ import cv2
 import matplotlib.pyplot as plt
 import LightPipes as lp
 
+import math
+from PIL import ImageGrab
+
 SM = 10 ** -2
 MM = 10 ** -3
 UM = 10 ** -6
@@ -50,11 +53,19 @@ class SLM:
 
 
 class Vision(ABC):
-    def __init__(self, width: int = 1280, height: int = 720, pixel: float = 3 * UM):
+    def __init__(self, width: int = 640, height: int = 480, pixel: float = 3 * UM):
         self.width = width
         self.height = height
 
         self.pixel = pixel
+
+        self.pixel_x = pixel
+        self.pixel_y = pixel
+
+        _x = np.linspace(- width // 2 * pixel, width // 2 * pixel, width)
+        _y = np.linspace(-height // 2 * pixel, height // 2 * pixel, height)
+
+        self.x, self.y = np.meshgrid(_x, _y)
 
     @abstractmethod
     def take_shot(self):
@@ -68,19 +79,17 @@ class Camera(Vision):
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.width)
         cap.set(cv2.CAP_PROP_EXPOSURE, -8)
         shots = []
-        for i in range(15):
+        for i in range(1):
             _, shot = cap.read()
 
             shot = np.asarray(shot, dtype='uint8')
-
 
             shot = cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
             shots.append(shot)
 
         shot = np.average(shots, axis=0)
 
-
-        #shot = np.asarray(shot, dtype='int16')
+        # shot = np.asarray(shot, dtype='int16')
         cap.release()
 
         return shot
@@ -90,7 +99,7 @@ class VirtualCamera(Vision):
     def __init__(self, width: int = 1280, height: int = 720, pixel: float = 3 * UM, slm: SLM = SLM(),
                  gauss_waist: float = 1 * MM,
                  wave: float = 850 * NM,
-                 focus = 100 * MM):
+                 focus=100 * MM):
         super().__init__(width, height, pixel)
         self.slm = slm
         self.gauss_waist = gauss_waist
@@ -128,7 +137,8 @@ class VirtualCamera(Vision):
 
 
 class Experiment:
-    def __init__(self, slm: SLM = SLM(), vision: Camera| VirtualCamera = Camera(), wave=850 * NM, focus=100 * MM, search_radius=20):
+    def __init__(self, slm: SLM = SLM(), vision: Camera | VirtualCamera = Camera(), wave=850 * NM, focus=100 * MM,
+                 search_radius=20):
         self.slm = slm
 
         self.wave = wave
@@ -153,13 +163,114 @@ class Experiment:
 
         self.on_slm = np.zeros((slm.height, slm.width))
 
+        self.num_zernike = 8
+        nm = self.calc_nm_list(self.num_zernike)
+
+        self.zernike_masks = [self.zernike(i[0], i[1]) for i in nm]
+
+        self.zer_shift = None
+        self.zer_back = None
+
+        self.axs, self.fig = None, None
+
+        self.zer_reg_x = 0
+        self.zer_reg_y = 0
+
+    def zernike_fit(self, iterations):
+
+        self.fig, self.axs = plt.subplots(2, 1, layout='constrained')
+        self.to_slm(self.holo_trap(0, 2000 * UM))
+
+        self.zer_back = self.take_shot()
+        self.zer_shift = self.holo_trap(1000 * UM, 0)
+
+        weights = np.random.uniform(-10, 2, self.num_zernike)
+        weights[0] = 0
+        weights[2] = 0
+        weights[1] = 0
+
+        q_history = []
+
+        self.to_slm(self.zer_shift)
+        shot = self.take_shot()
+
+        self.zer_reg_y, self.zer_reg_x = self.find_center(shot)
+
+        for k in range(iterations):
+            q = self.check_zernike(weights)
+            q_history.append(q)
+
+            velocity = 32
+            thresh = min(k + 0.1, 100)
+            weights = weights - velocity / thresh * self.zernike_gradient(weights)
+
+            print('Iteration :: ', k)
+            print('Beam Quality :: ', q)
+
+            plt.title(f'{len(q_history)},   u = {q}')
+            self.axs[0].clear()
+            self.axs[0].plot([i for i in range(len(q_history))], q_history)
+
+            self.axs[1].clear()
+            self.axs[1].bar([i for i in range(self.num_zernike)], weights)
+
+            self.axs[0].set_ylabel('Uniformity')
+
+            self.axs[1].set_ylabel('Weights')
+
+            plt.title(f'{len(q_history)}, beam quality = {q_history[-1]}')
+
+    def zernike_gradient(self, weights, epsilon=5):
+        result = np.ones(self.num_zernike)
+        for i in range(3, self.num_zernike):
+            weights[i] = weights[i] + epsilon / 2
+            value1 = self.check_zernike(weights)
+            weights[i] = weights[i] - epsilon
+            value2 = self.check_zernike(weights)
+            result[i] = (value1 - value2) / epsilon
+        return result
+
+    def check_zernike(self, weights):
+        mask = self.zernike_mask(weights)
+        self.to_slm((self.zer_shift + mask) % (2 * np.pi))
+
+        shot = self.take_shot()
+
+        _shot = shot / np.max(shot) * 255
+        _shot = np.asarray(_shot, dtype='uint8')
+        _shot = cv2.cvtColor(_shot, cv2.COLOR_GRAY2BGR)
+
+        cv2.imshow('drgsg', _shot)
+        cv2.waitKey(1)
+
+        value = self.beam_quality(np.abs(shot - self.zer_back))
+        return value
+
+    def zernike_mask(self, weights):
+        result = np.zeros_like(self.zernike_masks[-1])
+
+        for counter, item in enumerate(weights):
+            result = result + self.zernike_masks[counter]
+
+        return result
+
+    def beam_quality(self, shot):
+
+        mask = np.zeros_like(shot)
+
+        mask[self.zer_reg_x - self.search_radius: self.zer_reg_x + self.search_radius,
+        self.zer_reg_y - self.search_radius: self.zer_reg_y + self.search_radius] = 1
+
+        sigma = 100 * UM
+        weights = np.exp(-(self.vision.x**2 + self.vision.y**2)/2 / sigma**2)
+
+        return np.sum(weights * shot * mask)
 
 
     def to_slm(self, array):
         if isinstance(self.vision, Camera):
             self.slm.translate(array)
         self.on_slm = array
-
 
     def take_shot(self):
         if isinstance(self.vision, Camera):
@@ -224,7 +335,7 @@ class Experiment:
         show = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
                              (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 1)
 
-        #show = cv2.resize(show, (h//3, w//3))
+        # show = cv2.resize(show, (h // 3, w // 3))
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 
@@ -265,7 +376,7 @@ class Experiment:
         return np.max(shot * mask)
 
     def register_traps(self):
-        self.to_slm(self.holo_trap(0, 2000*UM))
+        # self.to_slm(self.holo_trap(0, 2000 * UM))
         self.back = self.take_shot()
 
         for i in range(self.num_traps):
@@ -348,6 +459,62 @@ class Experiment:
     @staticmethod
     def uniformity(values):
         return 1 - (np.max(values) - np.min(values)) / (np.max(values) + np.min(values))
+
+    @staticmethod
+    def binom(a: int, b: int):
+        a = int(a)
+        b = int(b)
+        if a >= b:
+            return math.factorial(a) / math.factorial(b) / math.factorial(a - b)
+        else:
+            return 0
+
+    @staticmethod
+    def calc_nm_list(number):
+        out = [[0, 0]]
+        n = 0
+        m = 0
+        for i in range(number - 1):
+            m += 2
+            if m <= n:
+                out.append([n, m])
+
+            else:
+                n += 1
+                m = -n
+                out.append([n, m])
+        return out
+
+    def zernike(self, n, m):
+        radius_y = 1
+
+        res_x = self.slm.width
+        res_y = self.slm.height
+
+        radius_x = radius_y / res_y * res_x
+
+        _x = np.linspace(-radius_x, radius_x, res_x)
+        _y = np.linspace(-radius_y, radius_y, res_y)
+
+        _x, _y = np.meshgrid(_x, _y)
+
+        r = np.sqrt(_x ** 2 + _y ** 2)
+
+        phi = np.arctan2(_y, _x)
+
+        array = np.zeros((res_y, res_x))
+        for k in range(0, int((n - abs(m)) / 2) + 1):
+            array = array + (-1) ** k * self.binom(n - k, k) * self.binom(n - 2 * k, (n - abs(m)) / 2 - k) * r ** (
+                    n - 2 * k)
+
+        if m >= 0:
+            array = array * np.cos(m * phi)
+        elif m < 0:
+            array = array * np.sin(m * phi)
+
+        array = array
+
+        return array
 
 
 @numba.njit(fastmath=True, parallel=True)

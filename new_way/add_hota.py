@@ -43,7 +43,7 @@ class GSplusWeight(Experiment):
 
         self.solution = []
 
-        self.fig, self.axs = plt.subplots(3, 1, layout='constrained')
+        self.fig, self.axs = None, None
 
     def iteration(self, weights):
         starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
@@ -56,6 +56,10 @@ class GSplusWeight(Experiment):
         shot = self.take_shot()
         values = self.check_intensities(shot)
         u = self.uniformity(values)
+
+        if (len(self.best_uniformity) == 0) or (u > self.best_uniformity[-1]):
+            self.best_uniformity.append(u)
+            self.best_weights.append(weights)
 
         self.weights_history.append(weights)
         self.intensities_history.append(values)
@@ -81,10 +85,14 @@ class GSplusWeight(Experiment):
 
         plt.gcf().canvas.flush_events()
 
+        image = ImageGrab.grab()
+        image.save(f'4x4/{len(self.u_history)}.png')
+
     def run(self, iterations):
         np.random.seed(2)
+        self.fig, self.axs = plt.subplots(3, 1, layout='constrained')
 
-        weights = np.random.uniform(1,1.2, self.num_traps)
+        weights = np.random.uniform(1, 2, self.num_traps)
         self.iteration(weights)
 
         velocity = 0.5
@@ -94,9 +102,9 @@ class GSplusWeight(Experiment):
             avg = np.average(values)
             u = self.u_history[-1]
 
-            thresh = min(k + 1, 100)
-
-            weights = weights + velocity * (1 - values) / thresh
+            thresh = min(k + 0.1, 100)
+            weights = self.best_weights[-1]
+            weights = weights + velocity * (avg - values) / thresh
             self.iteration(weights)
 
     @staticmethod
@@ -145,10 +153,10 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
 if __name__ == '__main__':
     plt.ion()
     exp = GSplusWeight()
-
-    exp.add_array(1000* UM, 0, 160 * UM, 160 * UM, 6, 6)
-    # exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
-    # exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
+    exp.zernike_fit(30)
+    #exp.add_array(1000 * UM, 0, 160 * UM, 160 * UM, 4, 4)
+    #exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
+    #exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
 
     # print('Угол наклона координатной сетки  ::  ', exp.angle_correct(500 * UM, 800 * UM))
 
