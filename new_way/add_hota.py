@@ -1,6 +1,7 @@
 import collections
 import copy
 import time
+import datetime
 from turtledemo.penrose import start
 
 import cv2
@@ -35,6 +36,8 @@ class GSplusWeight(Experiment):
         self.stag = 0
 
     def iteration(self, weights):
+        now = datetime.datetime.now().strftime("%H:%M:%S")
+        print(f"The time is {now}")
         starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
         hota = lambda solution: mega_HOTA(self.x_traps, self.y_traps, self.slm.x, self.slm.y, self.wave,
                                           self.focus, solution, starter, 20)
@@ -55,7 +58,7 @@ class GSplusWeight(Experiment):
             self.stag = 0
         else:
             self.stag += 1
-            if self.stag == 20:
+            if self.stag == 30:
                 self.stag = 0
                 print('stagnation')
 
@@ -96,6 +99,7 @@ class GSplusWeight(Experiment):
         # image = ImageGrab.grab()
         # image.save(f'4x4/{len(self.u_history)}.png')
 
+
     def run(self, iterations):
         np.random.seed(2)
         self.fig, self.axs = plt.subplots(5, 1, layout='constrained')
@@ -103,6 +107,7 @@ class GSplusWeight(Experiment):
         self.design = np.asarray(self.design)
         weights = self.design
         # weights = np.random.uniform(1, 1, self.num_traps)
+
         self.iteration(weights)
 
         values = self.intensities_history[-1]
@@ -127,6 +132,7 @@ class GSplusWeight(Experiment):
             weights = weights + velocity * (self.design / np.max(self.design) - values) / thresh
 
             self.iteration(weights)
+
 
     @staticmethod
     def calculate_k(x, y):
@@ -172,11 +178,12 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
 
 
 if __name__ == '__main__':
+    print(datetime.datetime.now().strftime("%H:%M:%S"))
     plt.ion()
     exp = GSplusWeight(vision=VirtualCamera())
     # exp.zernike_fit(30)
-    exp.add_array(0 * UM, 0, 85 * UM, 85 * UM, 4, 4, func=lambda i: i//4 + 1)
-    # exp.add_image('../images/ring.jpg', size_x=10, size_y=10, d_x=60*UM, d_y=60*UM)
+    #exp.add_array(0 * UM, 0, 85 * UM, 85 * UM, 1, 3, func=lambda i: i//4 + 1)
+    exp.add_image('../images/mona2.png', size_x=24, size_y=24, d_x=40*UM, d_y=40*UM)
     # exp.add_circle_array(0 * UM, 0, 300 * UM, 15)
     # exp.add_circle_array(0 * UM, 0, 150 * UM, 5, func=lambda i: i+1)
 
@@ -185,7 +192,6 @@ if __name__ == '__main__':
     # exp.apply_angle_correction()
 
     # exp.show_trap_map()
-
     exp.register_traps()
 
     exp.run(300)

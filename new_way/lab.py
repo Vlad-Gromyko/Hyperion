@@ -182,6 +182,7 @@ class Experiment:
         img = Image.open(path).convert('L')
         img = img.resize((size_x, size_y))
         img = np.asarray(img)
+        img = img / np.max(img)
 
 
         x_line = [c_x - d_x * (size_x - 1) / 2 + d_x * i for i in
@@ -193,7 +194,19 @@ class Experiment:
             for cy, iy in enumerate(y_line):
                 w = img[cy, cx]
                 if w>0:
-                    self.add_trap(ix, iy, w=img[cy, cx])
+                    self.add_trap(ix, iy, w=img[cy, cx] + 1)
+
+
+        #img = np.transpose(img)
+        h, w = np.shape(img)
+        img = img / np.max(img) * 255
+        img = cv2.resize(img, (size_x, size_y))
+        img = np.asarray(img, dtype='uint8')
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        img = cv2.applyColorMap(img, cv2.COLORMAP_HOT)
+
+        cv2.imshow('Target Traps', img)
+        cv2.waitKey(1)
 
     def zernike_fit(self, iterations):
 
@@ -349,12 +362,12 @@ class Experiment:
         shot = np.asarray(shot, dtype='uint8')
         shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
         shot = cv2.applyColorMap(shot, cv2.COLORMAP_HOT)
-        #for k in range(len(x_list)):
-            #shot = cv2.rectangle(shot, (x_list[k] - self.search_radius, y_list[k] - self.search_radius),
-                                # (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (0, 0, 255), 1)
+        for k in range(len(x_list)):
+            shot = cv2.rectangle(shot, (x_list[k] - self.search_radius, y_list[k] - self.search_radius),
+                                 (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (0, 0, 255), 2)
 
-        #shot = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
-                            # (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 1)
+        shot = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
+                             (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 2)
 
         show = cv2.resize(shot, (h // 3, w // 3))
         cv2.imshow('Registered Traps', show)
@@ -411,7 +424,7 @@ class Experiment:
             self.registered_x.append(x)
             self.registered_y.append(y)
             print('REG ', i + 1, 'X = ', x, 'Y = ', y)
-            # bar.next()
+            self.draw_area(i, self.registered_y, self.registered_x, shot)
 
         self.x_traps = np.asarray(self.x_traps)
         self.y_traps = np.asarray(self.y_traps)
