@@ -16,7 +16,7 @@ class Progress(Service):
         self.progress.set(0)
         self.progress.grid(row=1, column=0, padx=5, pady=5, sticky='nsew')
 
-        self.result_reactions['PROGRESS_UPDATE'] = lambda data: self.on_update(data)
+        self.event_reactions['PROGRESS_UPDATE'] = lambda data: self.on_update(data)
 
     def on_update(self, data):
         self.update_progress(data['value'], data['max_value'], data['name'])

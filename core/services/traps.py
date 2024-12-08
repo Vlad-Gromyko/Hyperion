@@ -151,6 +151,12 @@ class TrapsEditor(Service):
 
         self.request_reactions['TRAPS_SPECS'] = lambda: self.prepare_specs()
 
+        self.event_reactions['NEW_WEIGHTS'] = lambda weights: self.new_weights(weights)
+
+    def new_weights(self, weights):
+        for i in range(self.sheet.get_total_rows()):
+            spec = self.sheet[i].data
+            self.sheet[i].data = [spec[0], spec[1], spec[2], str(weights[i])]
 
     def plot_traps(self):
         x = []
@@ -171,25 +177,18 @@ class TrapsEditor(Service):
         plt.show()
 
     def prepare_specs(self):
-        traps = []
+        traps_x = []
+        traps_y = []
         weights = []
-
-        wave = self.event_bus.raise_request(Event('WAVE', data=None))
-        focus = self.event_bus.raise_request(Event('FOCUS', data=None))
-        pitch = self.event_bus.raise_request(Event('SLM_PITCH', data=None))
-
-        width = self.event_bus.raise_request(Event('SLM_WIDTH', data=None))
-        height = self.event_bus.raise_request(Event('SLM_HEIGHT', data=None))
 
         for i in range(self.sheet.get_total_rows()):
             spec = self.sheet[i].data
             if spec[0] != '' and spec[1] != '' and spec[2] != '' and spec[3] != '':
-                holo = calc_holo(spec[0], spec[1], spec[2], wave, focus, pitch, width, height)
-                traps.append(holo)
+                traps_x.append(float(spec[0]) * 10 ** -6)
+                traps_y.append(float(spec[1]) * 10 ** -6)
                 weights.append(float(spec[3]))
 
-        return np.asarray(traps), np.asarray(weights)
-
+        return np.asarray(traps_x), np.asarray(traps_y), np.asarray(weights)
 
     def add_array(self):
         x_c = float(self.x_c.get())

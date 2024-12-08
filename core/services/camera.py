@@ -3,6 +3,7 @@ from core.services.device import Device
 import customtkinter as ctk
 
 import cv2
+import LightPipes as lp
 
 
 class Filter(ctk.CTkFrame):
@@ -106,7 +107,8 @@ class Camera(Device):
         self.request_reactions['TAKE_SHOT'] = lambda: self.take_shot()
         self.request_reactions['TAKE_ROI_SHOT'] = lambda: self.take_roi_shot()
 
-        self.request_reactions['TAKE_ROI'] = lambda:(int(self.x_left.get()), int(self.y_left.get()), int(self.x_right.get()), int(self.y_right.get()))
+        self.request_reactions['TAKE_ROI'] = lambda: (
+        int(self.x_left.get()), int(self.y_left.get()), int(self.x_right.get()), int(self.y_right.get()))
 
         self.scroll = ctk.CTkScrollableFrame(notebook.tab('Фильтр'), width=100)
         self.scroll.grid()
@@ -151,16 +153,17 @@ class Camera(Device):
         cv2.destroyWindow('select the area')
 
     def take_shot(self):
-        if self.cap is None:
-            self.cap = cv2.VideoCapture(int(self.port.get()), cv2.CAP_DSHOW)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        ret, frame = self.cap.read()
+
+        cap = cv2.VideoCapture(int(self.port.get()), cv2.CAP_DSHOW)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        ret, frame = cap.read()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         for f in self.filters:
             gray = f.apply(gray)
 
+        cap.release()
         return gray
 
     def show_shot(self):

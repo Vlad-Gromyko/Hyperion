@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import LightPipes as lp
 
 import math
-from PIL import ImageGrab
+from PIL import ImageGrab, Image
 
 SM = 10 ** -2
 MM = 10 ** -3
@@ -176,6 +176,25 @@ class Experiment:
         self.zer_reg_x = 0
         self.zer_reg_y = 0
 
+        self.design = []
+
+    def add_image(self, path, size_x=6, size_y=6, c_x=0, c_y=0, d_x=60 * UM, d_y=60 * UM):
+        img = Image.open(path).convert('L')
+        img = img.resize((size_x, size_y))
+        img = np.asarray(img)
+
+
+        x_line = [c_x - d_x * (size_x - 1) / 2 + d_x * i for i in
+                  range(size_x)]
+        y_line = [c_y - d_y * (size_y - 1) / 2 + d_y * i for i in
+                  range(size_y)]
+
+        for cx, ix in enumerate(x_line):
+            for cy, iy in enumerate(y_line):
+                w = img[cy, cx]
+                if w>0:
+                    self.add_trap(ix, iy, w=img[cy, cx])
+
     def zernike_fit(self, iterations):
 
         self.fig, self.axs = plt.subplots(2, 1, layout='constrained')
@@ -262,10 +281,9 @@ class Experiment:
         self.zer_reg_y - self.search_radius: self.zer_reg_y + self.search_radius] = 1
 
         sigma = 100 * UM
-        weights = np.exp(-(self.vision.x**2 + self.vision.y**2)/2 / sigma**2)
+        weights = np.exp(-(self.vision.x ** 2 + self.vision.y ** 2) / 2 / sigma ** 2)
 
         return np.sum(weights * shot * mask)
-
 
     def to_slm(self, array):
         if isinstance(self.vision, Camera):
@@ -291,26 +309,28 @@ class Experiment:
     def holo_trap(self, x_trap, y_trap):
         return self.trap(x_trap, y_trap) % (2 * np.pi)
 
-    def add_trap(self, x, y):
+    def add_trap(self, x, y, w: float=1):
         self.x_traps.append(x)
         self.y_traps.append(y)
         self.num_traps += 1
+        self.design.append(w)
 
-    def add_array(self, c_x, c_y, d_x, d_y, n_x, n_y):
+    def add_array(self, c_x, c_y, d_x, d_y, n_x, n_y, func=lambda i: 1):
         x_line = [c_x - d_x * (n_x - 1) / 2 + d_x * i for i in
                   range(n_x)]
         y_line = [c_y - d_y * (n_y - 1) / 2 + d_y * i for i in
                   range(n_y)]
-
+        counter = 0
         for ix in x_line:
             for iy in y_line:
-                self.add_trap(ix, iy)
+                self.add_trap(ix, iy, w=func(counter))
+                counter += 1
 
-    def add_circle_array(self, c_x, c_y, radius, num):
+    def add_circle_array(self, c_x, c_y, radius, num, func=lambda i: 1):
         angle = 2 * np.pi / num
 
         for k in range(num):
-            self.add_trap(radius * np.cos(angle) + c_x, radius * np.sin(angle) + c_y)
+            self.add_trap(radius * np.cos(angle) + c_x, radius * np.sin(angle) + c_y, w=func(k))
             angle += 2 * np.pi / num
 
     def check_intensities(self, shot):
@@ -328,14 +348,15 @@ class Experiment:
         shot = shot / np.max(shot) * 255
         shot = np.asarray(shot, dtype='uint8')
         shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
-        for k in range(len(x_list)):
-            shot = cv2.rectangle(shot, (x_list[k] - self.search_radius, y_list[k] - self.search_radius),
-                                 (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (0, 0, 255), 1)
+        shot = cv2.applyColorMap(shot, cv2.COLORMAP_HOT)
+        #for k in range(len(x_list)):
+            #shot = cv2.rectangle(shot, (x_list[k] - self.search_radius, y_list[k] - self.search_radius),
+                                # (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (0, 0, 255), 1)
 
-        show = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
-                             (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 1)
+        #shot = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
+                            # (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 1)
 
-        # show = cv2.resize(show, (h // 3, w // 3))
+        show = cv2.resize(shot, (h // 3, w // 3))
         cv2.imshow('Registered Traps', show)
         cv2.waitKey(1)
 
@@ -376,7 +397,7 @@ class Experiment:
         return np.max(shot * mask)
 
     def register_traps(self):
-        # self.to_slm(self.holo_trap(0, 2000 * UM))
+        self.to_slm(self.holo_trap(0, 2000 * UM))
         self.back = self.take_shot()
 
         for i in range(self.num_traps):

@@ -1,6 +1,7 @@
 import collections
 import copy
 import time
+from turtledemo.penrose import start
 
 import cv2
 import matplotlib.pyplot as plt
@@ -9,23 +10,6 @@ import numpy as np
 from lab import *
 
 import numba
-
-
-@numba.njit(fastmath=True, parallel=True)
-def gs(x_traps, y_traps, wave, focus, x_mesh, y_mesh, starter, solution, iterations):
-    num_traps = len(solution)
-
-    phase = starter
-
-    for k in range(iterations):
-        summ_phase = np.zeros_like(starter, dtype='complex128')
-        for i in range(num_traps):
-            trap = 2 * np.pi / wave / focus * (x_mesh * x_traps[i] + y_mesh * y_traps[i])
-            solution[i] = np.angle(np.sum(np.exp(-1j * (phase - trap))))
-            summ_phase = summ_phase + 1 / num_traps * np.exp(-1j * (trap + solution[i]))
-        phase = np.angle(summ_phase)
-
-    return phase, solution
 
 
 class GSplusWeight(Experiment):
@@ -41,9 +25,14 @@ class GSplusWeight(Experiment):
         self.best_uniformity = []
         self.best_intensities = []
 
+        self.d_history = []
+        self.best_d_history = []
+
         self.solution = []
 
         self.fig, self.axs = None, None
+
+        self.stag = 0
 
     def iteration(self, weights):
         starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
@@ -55,15 +44,26 @@ class GSplusWeight(Experiment):
 
         shot = self.take_shot()
         values = self.check_intensities(shot)
-        u = self.uniformity(values)
+        u = self.uniformity(values / self.design)
+        d = np.sum(np.abs(values - np.asarray(self.design) / np.max(self.design)))
 
         if (len(self.best_uniformity) == 0) or (u > self.best_uniformity[-1]):
             self.best_uniformity.append(u)
             self.best_weights.append(weights)
+            self.best_d_history.append(d)
+            print('best')
+            self.stag = 0
+        else:
+            self.stag += 1
+            if self.stag == 20:
+                self.stag = 0
+                print('stagnation')
 
         self.weights_history.append(weights)
         self.intensities_history.append(values)
         self.u_history.append(u)
+
+        self.d_history.append(d)
         self.gradient_history.append(np.zeros(self.num_traps))
         plt.title(f'{len(self.u_history)},   u = {u}')
         self.axs[0].clear()
@@ -75,9 +75,17 @@ class GSplusWeight(Experiment):
         self.axs[2].clear()
         self.axs[2].bar([i for i in range(self.num_traps)], weights)
 
+        self.axs[3].clear()
+        self.axs[3].plot([i for i in range(len(self.d_history))], self.d_history)
+
+        self.axs[4].clear()
+        self.axs[4].bar([i for i in range(len(self.design))], self.design)
+
         self.axs[0].set_ylabel('Uniformity')
         self.axs[1].set_ylabel('Intensities')
         self.axs[2].set_ylabel('Weights')
+        self.axs[3].set_ylabel('Deviation')
+        self.axs[4].set_ylabel('Target')
 
         plt.title(f'{len(self.u_history)}, u = {self.u_history[-1]}')
 
@@ -85,26 +93,39 @@ class GSplusWeight(Experiment):
 
         plt.gcf().canvas.flush_events()
 
-        image = ImageGrab.grab()
-        image.save(f'4x4/{len(self.u_history)}.png')
+        # image = ImageGrab.grab()
+        # image.save(f'4x4/{len(self.u_history)}.png')
 
     def run(self, iterations):
         np.random.seed(2)
-        self.fig, self.axs = plt.subplots(3, 1, layout='constrained')
-
-        weights = np.random.uniform(1, 2, self.num_traps)
+        self.fig, self.axs = plt.subplots(5, 1, layout='constrained')
+        # self.design = [1, 1, 1, 2, 2, 2, 3, 3, 3]
+        self.design = np.asarray(self.design)
+        weights = self.design
+        # weights = np.random.uniform(1, 1, self.num_traps)
         self.iteration(weights)
 
-        velocity = 0.5
+        values = self.intensities_history[-1]
+
+        velocity = 1
+        thresh = 1
+        start_thresh = 1
 
         for k in range(iterations):
             values = self.intensities_history[-1]
+
             avg = np.average(values)
             u = self.u_history[-1]
+            d = self.d_history[-1]
 
-            thresh = min(k + 0.1, 100)
+            davg = np.average(values, weights=1 / self.design)
+
+            thresh = start_thresh if self.stag == 0 else thresh * 2
+            # thresh = start_thresh if d <= self.best_d_history[-1] else thresh * 2
+            print(velocity / thresh)
             weights = self.best_weights[-1]
-            weights = weights + velocity * (avg - values) / thresh
+            weights = weights + velocity * (self.design / np.max(self.design) - values) / thresh
+
             self.iteration(weights)
 
     @staticmethod
@@ -152,11 +173,12 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
 
 if __name__ == '__main__':
     plt.ion()
-    exp = GSplusWeight()
-    exp.zernike_fit(30)
-    #exp.add_array(1000 * UM, 0, 160 * UM, 160 * UM, 4, 4)
-    #exp.add_circle_array(800 * UM, 0, 300 * UM, 15)
-    #exp.add_circle_array(800 * UM, 0, 150 * UM, 5)
+    exp = GSplusWeight(vision=VirtualCamera())
+    # exp.zernike_fit(30)
+    exp.add_array(0 * UM, 0, 85 * UM, 85 * UM, 4, 4, func=lambda i: i//4 + 1)
+    # exp.add_image('../images/ring.jpg', size_x=10, size_y=10, d_x=60*UM, d_y=60*UM)
+    # exp.add_circle_array(0 * UM, 0, 300 * UM, 15)
+    # exp.add_circle_array(0 * UM, 0, 150 * UM, 5, func=lambda i: i+1)
 
     # print('Угол наклона координатной сетки  ::  ', exp.angle_correct(500 * UM, 800 * UM))
 

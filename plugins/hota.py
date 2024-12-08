@@ -30,7 +30,7 @@ class Plugin(AbstractPlugin):
         ctk.CTkLabel(frame_iterations, text='Число Итераций:', fg_color='#000',
                      text_color='#FFF').grid(row=0, column=0)
         self.iterations = ctk.CTkEntry(frame_iterations, width=45, bg_color='#1E90FF')
-        self.iterations.insert(0, '30')
+        self.iterations.insert(0, '10')
         self.iterations.grid(row=0, column=1)
 
         self.timer = ctk.CTkLabel(self.frame, text='ВРЕМЯ : ', fg_color='#000')
@@ -38,12 +38,24 @@ class Plugin(AbstractPlugin):
 
     def algo_start(self):
         start = time.time()
-        traps, weights = self.event_bus.raise_request(Event('TRAPS_SPECS'))
+        traps_x, traps_y, weights = self.event_bus.raise_request(Event('TRAPS_SPECS'))
         iterations = int(self.iterations.get())
         starter = self.starter.get_array()
 
-        result = mega_HOTA(traps, user_weights=weights, initial_phase=starter,
-                           iterations=iterations) + np.pi
+        width = self.event_bus.raise_request(Event('SLM_WIDTH'))
+        height = self.event_bus.raise_request(Event('SLM_HEIGHT'))
+        pixel = self.event_bus.raise_request(Event('SLM_PITCH'))
+        wave = self.event_bus.raise_request(Event('WAVE'))
+        focus = self.event_bus.raise_request(Event('FOCUS'))
+
+        _x = np.linspace(- width // 2 * pixel, width // 2 * pixel, width)
+        _y = np.linspace(-height // 2 * pixel, height // 2 * pixel, height)
+
+        x, y = np.meshgrid(_x, _y)
+
+        result = mega_HOTA(x_list=traps_x, y_list=traps_y, x_mesh=x, y_mesh=y, wave=wave, focus=focus,
+                           user_weights=weights,
+                           initial_phase=starter, iterations=iterations)
 
         self.holo.set_array(result)
 
@@ -53,6 +65,8 @@ class Plugin(AbstractPlugin):
         res_x = self.event_bus.raise_request(Event('SLM_WIDTH'))
         res_y = self.event_bus.raise_request(Event('SLM_HEIGHT'))
         gray = self.event_bus.raise_request(Event('SLM_GRAY'))
+        self.event_reactions['HOTA'] = lambda a: self.algo_start()
+        self.request_reactions['TAKE_HOTA'] = lambda : self.holo.get_array()
 
         self.holo = MaskView(master=self.notebook.tab('Голограмма'), array=np.zeros((res_y, res_x)), slm_gray_edge=gray,
                              small_res_x=320,
@@ -85,7 +99,7 @@ class Plugin(AbstractPlugin):
 
 
 @numba.njit(fastmath=True, parallel=True)
-def mega_HOTA(traps, user_weights, initial_phase, iterations):
+def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial_phase, iterations):
     num_traps = len(user_weights)
     v_list = np.zeros_like(user_weights, dtype=np.complex128)
     area = np.shape(initial_phase)[0] * np.shape(initial_phase)[1]
@@ -93,9 +107,11 @@ def mega_HOTA(traps, user_weights, initial_phase, iterations):
 
     w_list = np.ones(num_traps)
 
+    lattice = 2 * np.pi / wave / focus
 
-    for i in numba.prange(num_traps):
-        v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - traps[i])))
+    for i in range(num_traps):
+        trap = (lattice * (x_list[i] * x_mesh + y_list[i] * y_mesh)) % (2 * np.pi)
+        v_list[i] = 1 / area * np.sum(np.exp(1j * (initial_phase - trap)))
 
     anti_user_weights = 1 / user_weights
 
@@ -107,11 +123,12 @@ def mega_HOTA(traps, user_weights, initial_phase, iterations):
 
         summ = np.zeros_like(initial_phase, dtype=np.complex128)
         for ip in range(num_traps):
-            summ = summ + np.exp(1j * traps[ip]) * user_weights[ip] * v_list[ip] * w_list[ip] / np.abs(
+            trap = (lattice * (x_list[ip] * x_mesh + y_list[ip] * y_mesh)) % (2 * np.pi)
+            summ = summ + np.exp(1j * trap) * user_weights[ip] * v_list[ip] * w_list[ip] / np.abs(
                 v_list[ip])
         phase = np.angle(summ)
 
         for iv in range(num_traps):
-            v_list[iv] = 1 / area * np.sum(np.exp(1j * (phase - traps[iv])))
-
+            trap = (lattice * (x_list[iv] * x_mesh + y_list[iv] * y_mesh)) % (2 * np.pi)
+            v_list[iv] = 1 / area * np.sum(np.exp(1j * (phase - trap)))
     return phase

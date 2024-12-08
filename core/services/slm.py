@@ -54,6 +54,7 @@ class SLM(Device):
         self.request_reactions['SLM_WIDTH'] = lambda: width
         self.request_reactions['SLM_HEIGHT'] = lambda: height
         self.request_reactions['SLM_GRAY'] = lambda: self.wheel.get()
+        self.request_reactions['MASK_ON_SLM'] = lambda: self.mask.get_array()
 
         self.event_reactions['TO_SLM'] = lambda array : self.mask.set_array(array)
         self.event_reactions['TURN_ON_SLM'] = lambda data: self.turn_on()
