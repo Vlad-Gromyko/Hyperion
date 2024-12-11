@@ -42,6 +42,7 @@ class GSplusWeight(Experiment):
     def iteration(self, weights):
         now = datetime.datetime.now().strftime("%H:%M:%S")
         print(f"The time is {now}")
+        np.random.seed(42)
         starter = np.random.uniform(0, 2 * np.pi, (self.slm.height, self.slm.width))
         hota = lambda solution: mega_HOTA(self.x_traps, self.y_traps, self.slm.x, self.slm.y, self.wave,
                                           self.focus, solution, starter, 20)
@@ -64,6 +65,7 @@ class GSplusWeight(Experiment):
             self.stag += 1
             if self.stag == 30:
                 self.stag = 0
+                self.start_thresh *= 3
                 print('stagnation')
 
         self.weights_history.append(weights)
@@ -102,9 +104,9 @@ class GSplusWeight(Experiment):
 
         # image = ImageGrab.grab()
         # image.save(f'4x4/{len(self.u_history)}.png')
-        name = fr'C:\Users\vgrom\PycharmProjects\Hyperion_\new_way\5x5_exp_stag\{len(self.u_history)}.png'
+        # name = fr'C:\Users\vgrom\PycharmProjects\Hyperion_\new_way\5x5_exp_stag\{len(self.u_history)}.png'
+        name = fr'D:\PYTHON_PROJECTS\2024\Hyperion_dec\new_way\5x5_gradations_sim\{len(self.u_history)}.png'
         self.screenshot(name)
-
 
     def run(self, iterations):
         np.random.seed(2)
@@ -112,7 +114,7 @@ class GSplusWeight(Experiment):
         # self.design = [1, 1, 1, 2, 2, 2, 3, 3, 3]
         self.design = np.asarray(self.design)
         weights = self.design
-        #weights = np.random.uniform(1, 2, self.num_traps)
+        weights = np.random.uniform(1, 1, self.num_traps)
 
         self.iteration(weights)
 
@@ -120,7 +122,7 @@ class GSplusWeight(Experiment):
 
         velocity = 1
         thresh = 1
-        start_thresh = 1
+        self.start_thresh = 1
 
         for k in range(iterations):
             values = self.intensities_history[-1]
@@ -131,14 +133,13 @@ class GSplusWeight(Experiment):
 
             davg = np.average(values, weights=1 / self.design)
 
-            thresh = start_thresh if self.stag == 0 else thresh * 2
+            thresh = self.start_thresh if self.stag == 0 else thresh * 2
             # thresh = start_thresh if d <= self.best_d_history[-1] else thresh * 2
             print(velocity / thresh)
             weights = self.best_weights[-1]
             weights = weights + velocity * (self.design / np.max(self.design) - values) / thresh
-            weights = self.design
-            self.iteration(weights)
 
+            self.iteration(weights)
 
     @staticmethod
     def calculate_k(x, y):
@@ -186,12 +187,12 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
 if __name__ == '__main__':
     print(datetime.datetime.now().strftime("%H:%M:%S"))
     plt.ion()
-    exp = GSplusWeight()
+    exp = GSplusWeight(vision=VirtualCamera())
     # exp.zernike_fit(30)
-    exp.add_array(1300 * UM, 0, 120 * UM, 120 * UM, 5, 5)
-    #exp.add_image('../images/mona2.png', size_x=24, size_y=24, d_x=40*UM, d_y=40*UM)
+    # exp.add_array(0 * UM, 0, 120 * UM, 120 * UM, 5, 5, func=lambda i: 5 - i // 5)
+    exp.add_image('../images/mona2.png', size_x=24, size_y=24, d_x=40*UM, d_y=40*UM)
     # exp.add_circle_array(0 * UM, 0, 300 * UM, 15)
-    #exp.add_circle_array(1450 * UM, 200 * UM, 500 * UM, 25)
+    # exp.add_circle_array(1450 * UM, 200 * UM, 500 * UM, 25)
 
     # print('Угол наклона координатной сетки  ::  ', exp.angle_correct(500 * UM, 800 * UM))
 
