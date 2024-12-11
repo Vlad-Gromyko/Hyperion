@@ -361,7 +361,7 @@ class Experiment:
         shot = shot / np.max(shot) * 255
         shot = np.asarray(shot, dtype='uint8')
         shot = cv2.cvtColor(shot, cv2.COLOR_GRAY2BGR)
-        shot = cv2.applyColorMap(shot, cv2.COLORMAP_HOT)
+        #shot = cv2.applyColorMap(shot, cv2.COLORMAP_HOT)
         for k in range(len(x_list)):
             shot = cv2.rectangle(shot, (x_list[k] - self.search_radius, y_list[k] - self.search_radius),
                                  (x_list[k] + self.search_radius, y_list[k] + self.search_radius), (0, 0, 255), 2)
@@ -369,8 +369,8 @@ class Experiment:
         shot = cv2.rectangle(shot, (x_list[i] - self.search_radius, y_list[i] - self.search_radius),
                              (x_list[i] + self.search_radius, y_list[i] + self.search_radius), (0, 255, 0), 2)
 
-        show = cv2.resize(shot, (h // 3, w // 3))
-        cv2.imshow('Registered Traps', show)
+        #shot = cv2.resize(shot, (h // 3, w // 3))
+        cv2.imshow('Registered Traps', shot)
         cv2.waitKey(1)
 
     @staticmethod
@@ -410,7 +410,7 @@ class Experiment:
         return np.max(shot * mask)
 
     def register_traps(self):
-        self.to_slm(self.holo_trap(0, 2000 * UM))
+        #self.to_slm(self.holo_trap(0, 2000 * UM))
         self.back = self.take_shot()
 
         for i in range(self.num_traps):

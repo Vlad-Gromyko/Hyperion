@@ -153,17 +153,17 @@ class Camera(Device):
         cv2.destroyWindow('select the area')
 
     def take_shot(self):
-
-        cap = cv2.VideoCapture(int(self.port.get()), cv2.CAP_DSHOW)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        ret, frame = cap.read()
+        if self.cap is None:
+            self.cap = cv2.VideoCapture(int(self.port.get()), cv2.CAP_DSHOW)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        ret, frame = self.cap.read()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         for f in self.filters:
             gray = f.apply(gray)
 
-        cap.release()
+        # self.cap.release()
         return gray
 
     def show_shot(self):

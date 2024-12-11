@@ -35,6 +35,10 @@ class GSplusWeight(Experiment):
 
         self.stag = 0
 
+    def screenshot(self, name):
+        screenshot = ImageGrab.grab()
+        screenshot.save(name)
+
     def iteration(self, weights):
         now = datetime.datetime.now().strftime("%H:%M:%S")
         print(f"The time is {now}")
@@ -98,6 +102,8 @@ class GSplusWeight(Experiment):
 
         # image = ImageGrab.grab()
         # image.save(f'4x4/{len(self.u_history)}.png')
+        name = fr'C:\Users\vgrom\PycharmProjects\Hyperion_\new_way\5x5_exp_stag\{len(self.u_history)}.png'
+        self.screenshot(name)
 
 
     def run(self, iterations):
@@ -106,7 +112,7 @@ class GSplusWeight(Experiment):
         # self.design = [1, 1, 1, 2, 2, 2, 3, 3, 3]
         self.design = np.asarray(self.design)
         weights = self.design
-        # weights = np.random.uniform(1, 1, self.num_traps)
+        #weights = np.random.uniform(1, 2, self.num_traps)
 
         self.iteration(weights)
 
@@ -130,7 +136,7 @@ class GSplusWeight(Experiment):
             print(velocity / thresh)
             weights = self.best_weights[-1]
             weights = weights + velocity * (self.design / np.max(self.design) - values) / thresh
-
+            weights = self.design
             self.iteration(weights)
 
 
@@ -180,12 +186,12 @@ def mega_HOTA(x_list, y_list, x_mesh, y_mesh, wave, focus, user_weights, initial
 if __name__ == '__main__':
     print(datetime.datetime.now().strftime("%H:%M:%S"))
     plt.ion()
-    exp = GSplusWeight(vision=VirtualCamera())
+    exp = GSplusWeight()
     # exp.zernike_fit(30)
-    #exp.add_array(0 * UM, 0, 85 * UM, 85 * UM, 1, 3, func=lambda i: i//4 + 1)
-    exp.add_image('../images/mona2.png', size_x=24, size_y=24, d_x=40*UM, d_y=40*UM)
+    exp.add_array(1300 * UM, 0, 120 * UM, 120 * UM, 5, 5)
+    #exp.add_image('../images/mona2.png', size_x=24, size_y=24, d_x=40*UM, d_y=40*UM)
     # exp.add_circle_array(0 * UM, 0, 300 * UM, 15)
-    # exp.add_circle_array(0 * UM, 0, 150 * UM, 5, func=lambda i: i+1)
+    #exp.add_circle_array(1450 * UM, 200 * UM, 500 * UM, 25)
 
     # print('Угол наклона координатной сетки  ::  ', exp.angle_correct(500 * UM, 800 * UM))
 
